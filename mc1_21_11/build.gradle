@@ -3,7 +3,7 @@ plugins { id 'fabric-loom' version '1.19.3' }
 // Pick the newest yarn / Fabric API for this Minecraft version automatically; fall back to gradle.properties.
 def latestFromMaven(String url, Closure matches, String fallback) {
     try {
-        def versions = new XmlSlurper().parse(url).versioning.versions.version.collect { it.text() }.findAll(matches)
+        def versions = new groovy.xml.XmlSlurper().parse(url).versioning.versions.version.collect { it.text() }.findAll(matches)
         return versions ? versions.last() : fallback
     } catch (Throwable ignored) { return fallback }
 }
