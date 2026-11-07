@@ -1,0 +1,38 @@
+plugins { id 'fabric-loom' version '1.19.3' }
+
+// Pick the newest yarn / Fabric API for this Minecraft version automatically; fall back to gradle.properties.
+def latestFromMaven(String url, Closure matches, String fallback) {
+    try {
+        def versions = new XmlSlurper().parse(url).versioning.versions.version.collect { it.text() }.findAll(matches)
+        return versions ? versions.last() : fallback
+    } catch (Throwable ignored) { return fallback }
+}
+def mc = project.minecraft_version
+def yarnVersion = latestFromMaven('https://maven.fabricmc.net/net/fabricmc/yarn/maven-metadata.xml',
+        { it.startsWith(mc + '+build.') }, project.yarn_mappings)
+def fabricApiVersion = latestFromMaven('https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/maven-metadata.xml',
+        { it.endsWith('+' + mc) }, project.fabric_api_version)
+
+version = "${project.mod_version}+${project.minecraft_version}"
+base { archivesName = 'surgelyrics' }
+
+java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
+tasks.withType(JavaCompile).configureEach { options.release = 21 }
+
+repositories { mavenCentral() }
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${yarnVersion}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVersion}"
+    implementation project(':core')
+}
+
+// ship the version-independent core inside this jar
+jar { from(project(':core').sourceSets.main.output) }
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') { expand 'version': project.version }
+}

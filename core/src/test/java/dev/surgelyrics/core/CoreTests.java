@@ -1,0 +1,139 @@
+package dev.surgelyrics.core;
+
+import java.nio.file.*;
+import java.util.*;
+
+public final class CoreTests {
+    static int pass, fail;
+    static void check(String name, boolean ok) { if (ok) pass++; else { fail++; System.out.println("FAIL: " + name); } }
+    static void eq(String name, Object a, Object b) { check(name + " (got " + a + ", want " + b + ")", Objects.equals(a, b)); }
+
+    public static void main(String[] args) throws Exception {
+        // ---- Json
+        Object j = Json.parse("{\"a\":[1,2.5,\"x\\n\\u0041\"],\"b\":{\"c\":true,\"d\":null}}");
+        eq("json nested", Json.str(Json.arr(Json.obj(j).get("a")).get(2), ""), "x\nA");
+        eq("json bool", Json.bool(Json.obj(Json.obj(j).get("b")).get("c"), false), true);
+        String round = Json.write(j);
+        eq("json roundtrip", Json.write(Json.parse(round)), round);
+        boolean threw = false; try { Json.parse("{\"a\":"); } catch (IllegalArgumentException e) { threw = true; }
+        check("json rejects truncated", threw);
+
+        // ---- Lrc
+        List<Lrc.Line> l = Lrc.parse("[00:01.5] one\n[00:02.50]two\n[01:00.123]three\n[00:10]\n[00:05][00:20.00] chorus\njunk\n[00:03:25]colon");
+        eq("lrc count", l.size(), 6);
+        eq("lrc .5 is 500ms", l.get(0).timeMs(), 1500L);
+        eq("lrc .50 is 500ms", l.get(1).timeMs(), 2500L);
+        eq("lrc colon fraction", l.get(2).timeMs(), 3250L);
+        eq("lrc multi-stamp sorted", l.get(3).text(), "chorus");
+        eq("lrc 3-digit ms", l.get(5).timeMs(), 60123L);
+        eq("lrc blank skipped", l.stream().anyMatch(x -> x.timeMs() == 10000), false);
+        eq("indexAt before first", Lrc.indexAt(l, 1000), -1);
+        eq("indexAt exact", Lrc.indexAt(l, 1500), 0);
+        eq("indexAt mid", Lrc.indexAt(l, 4000), 2);
+        eq("indexAt end", Lrc.indexAt(l, 999999), 5);
+        eq("indexAt empty", Lrc.indexAt(List.of(), 5), -1);
+        eq("lrc null", Lrc.parse(null).size(), 0);
+
+        // ---- Track
+        Track t = new Track("id", "T", "A", "", 10_000, 9_000, 0, true);
+        eq("track clamps to duration", t.positionMs(5_000_000_000L), 10_000L);
+        Track p = new Track("id", "T", "A", "", 10_000, 4_000, 0, false);
+        eq("track paused does not advance", p.positionMs(9_000_000_000L), 4_000L);
+
+        // ---- LrcLib with fake transport
+        List<String> urls = new ArrayList<>();
+        Net.Fetcher fake = url -> {
+            urls.add(url);
+            if (url.contains("/get?")) return null;                       // exact match misses
+            return "[{\"duration\":300,\"syncedLyrics\":\"[00:01.00] far\"},"
+                 + "{\"duration\":201,\"syncedLyrics\":\"[00:02.00] near\"},"
+                 + "{\"duration\":200,\"syncedLyrics\":\"\"}]";
+        };
+        LrcLib lib = new LrcLib(fake, "http://x");
+        Track song = Track.of("s1", "Hello World", "Me & You", "Alb", 200_000, 0, true);
+        List<Lrc.Line> got = lib.request(song).get();
+        eq("search picks closest duration w/ lyrics", got.get(0).text(), "near");
+        check("url encodes", urls.get(0).contains("Hello+World") && urls.get(0).contains("Me+%26+You"));
+        int before = urls.size();
+        lib.request(song).get();
+        eq("second request hits cache", urls.size(), before);
+
+        Net.Fetcher down = url -> { throw new java.io.IOException("offline"); };
+        LrcLib lib2 = new LrcLib(down, "http://x");
+        Track s2 = Track.of("s2", "X", "Y", "", 100_000, 0, true);
+        eq("failure yields empty", lib2.request(s2).get().size(), 0);
+        check("failure is not cached", lib2.cached(s2) == null);
+
+        // ---- Settings
+        Path dir = Files.createTempDirectory("sl");
+        Path f = dir.resolve("settings.json");
+        Files.writeString(f, "{ not json at all");
+        Settings s = Settings.load(f);
+        eq("corrupt file -> defaults", s.wordsPerLine, 4);
+        Files.writeString(f, "{\"wordsPerLine\":99,\"staySeconds\":-4,\"surgeProfile\":\"nope\",\"redirectPort\":80,\"colour\":4286578687}");
+        s = Settings.load(f);
+        eq("clamps high", s.wordsPerLine, 8);
+        eq("clamps low", s.staySeconds, 1f);
+        eq("bad profile -> BALANCED", s.surgeProfile, "BALANCED");
+        eq("bad port -> default", s.redirectPort, 19542);
+        s.spotifyClientId = "  abc  "; s.colour = 0xFF112233; s.save(f);
+        Settings s3 = Settings.load(f);
+        eq("save/load trims id", s3.spotifyClientId, "abc");
+        eq("save/load colour", s3.colour, 0xFF112233);
+        check("no tmp file left", !Files.exists(dir.resolve("settings.json.tmp")));
+
+        // ---- TokenStore
+        Path tf = dir.resolve("auth.json");
+        TokenStore ts = new TokenStore(); ts.refresh = "r"; ts.access = "a"; ts.expiresAtMs = 5; ts.save(tf);
+        TokenStore ts2 = TokenStore.load(tf);
+        eq("token roundtrip", ts2.refresh + ts2.access + ts2.expiresAtMs, "ra5");
+        check("tokens not in settings", !Files.readString(f).contains("\"r\""));
+
+        // ---- Spotify pure helpers (RFC 7636 test vector)
+        eq("pkce challenge", Spotify.challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+                "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+        Map<String, String> q = Spotify.parseQuery("code=a%20b&state=xyz&flag");
+        eq("query decode", q.get("code"), "a b");
+        eq("query flag", q.get("flag"), "");
+        check("random differs", !Spotify.randomB64(32).equals(Spotify.randomB64(32)));
+
+        // ---- SurgeGovernor
+        SurgeGovernor g = new SurgeGovernor();
+        g.configure(SurgeProfile.BALANCED, true, 100);
+        check("near entity kept", !g.cullEntity(30 * 30));
+        check("far entity culled", g.cullEntity(100 * 100));
+        for (int i = 0; i < 4; i++) g.onSecond(40);        // sustained slow
+        check("adaptive tightens", g.scale() < 1.0);
+        double tight = g.scale();
+        for (int i = 0; i < 30; i++) g.onSecond(200);      // sustained fast
+        check("adaptive relaxes", g.scale() > tight);
+        for (int i = 0; i < 200; i++) g.onSecond(1);
+        check("scale floor 0.5", g.scale() >= 0.5);
+        g.configure(SurgeProfile.VANILLA, true, 100);
+        check("vanilla never culls", !g.cullEntity(1e9) && g.particleBudget() == 0 && !g.hideClouds());
+        g.configure(SurgeProfile.POTATO, false, 100);
+        for (int i = 0; i < 50; i++) g.onSecond(1);
+        eq("non-adaptive scale fixed", g.scale(), 1.0);
+        check("potato hides weather", g.hideWeather());
+        check("profile cycle wraps", SurgeProfile.POTATO.next() == SurgeProfile.VANILLA);
+
+        // ---- LyricsView
+        List<Lrc.Line> v = Lrc.parse("[00:10.00] a b c d e f g h\n[00:14.00] last line\n[00:40.00] after gap");
+        eq("view before start empty", LyricsView.compute(v, 5000, 4, 3.5f).text(), "");
+        LyricsView.View v1 = LyricsView.compute(v, 10100, 4, 3.5f);
+        eq("view first chunk", v1.text(), "a b c d");
+        LyricsView.View v2 = LyricsView.compute(v, 12500, 4, 3.5f);
+        eq("view second chunk", v2.text(), "e f g h");
+        check("view fades in", LyricsView.compute(v, 10000, 4, 3.5f).alpha() < 0.01f && v1.alpha() > 0.3f);
+        eq("view next line", v1.next(), "last line");
+        check("view fades in long gap", LyricsView.compute(v, 14000 + 3000 + 500, 4, 3.5f).alpha() > 0.9f
+                && LyricsView.compute(v, 14000 + 3900, 4, 3.5f).alpha() < 0.01f);
+        eq("view 1 word/chunk", LyricsView.compute(v, 10000, 1, 3.5f).text(), "a");
+        eq("clock", LyricsView.clock(65_000), "1:05");
+        eq("withAlpha", Integer.toHexString(LyricsView.withAlpha(0xFFFFFFFF, 0.5f)), "80ffffff");
+        eq("mix mid", LyricsView.mix(0xFF000000, 0xFFFFFFFF, 0.5f) & 0xFF, 127);
+
+        System.out.println(pass + " passed, " + fail + " failed");
+        System.exit(fail == 0 ? 0 : 1);
+    }
+}
