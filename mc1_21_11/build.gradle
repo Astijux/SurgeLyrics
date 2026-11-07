@@ -16,7 +16,6 @@ def fabricApiVersion = latestFromMaven('https://maven.fabricmc.net/net/fabricmc/
 version = "${project.mod_version}+${project.minecraft_version}"
 base { archivesName = 'surgelyrics' }
 
-java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
 tasks.withType(JavaCompile).configureEach { options.release = 21 }
 
 repositories { mavenCentral() }
