@@ -12,6 +12,7 @@ import java.util.List;
 /** Clean centered lyrics + a slim now-playing bar + optional Surge overlay. Everything is drawn in one pass. */
 public final class LyricsHud implements HudElement {
     private static final int[][] GLOW = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+    static volatile int lastFps;
     private long fpsWindowStart = System.nanoTime();
     private int frames, fps;
 
@@ -32,7 +33,8 @@ public final class LyricsHud implements HudElement {
         }
 
         if (!s.lyricsEnabled) return;
-        Track track = Runtime.SPOTIFY.track();
+        Glass.alpha = 1f;
+        Track track = Runtime.NOW.track();
         if (track == null) return;
 
         List<Lrc.Line> lines = Runtime.LYRICS.cached(track);
@@ -59,12 +61,12 @@ public final class LyricsHud implements HudElement {
         frames++;
         long now = System.nanoTime();
         if (now - fpsWindowStart >= 1_000_000_000L) {
-            fps = frames; frames = 0; fpsWindowStart = now;
+            fps = frames; lastFps = fps; frames = 0; fpsWindowStart = now;
             Runtime.SURGE.onSecond(fps);
         }
     }
 
-    private void drawCentered(DrawContext ctx, TextRenderer font, String text, float cx, float cy,
+    static void drawCentered(DrawContext ctx, TextRenderer font, String text, float cx, float cy,
                               float scale, float alpha, Settings s, boolean glowAllowed) {
         int tw = font.getWidth(text);
         var m = ctx.getMatrices();
@@ -94,16 +96,17 @@ public final class LyricsHud implements HudElement {
     }
 
     private void drawBar(DrawContext ctx, TextRenderer font, int w, Track t, List<Lrc.Line> lines, Settings s) {
-        int bw = Math.min(200, w - 20), x = (w - bw) / 2, y = 6;
-        ctx.fill(x, y, x + bw, y + 24, 0xA0101018);
-        String title = fit(font, t.title() + "  -  " + t.artist(), bw - 10);
-        ctx.drawTextWithShadow(font, title, x + 5, y + 4, 0xFFFFFFFF);
+        int bw = Math.min(210, w - 20), x = (w - bw) / 2, y = 6, bh = 28;
+        Glass.shadow(ctx, x, y, bw, bh, 10);
+        Glass.panel(ctx, x, y, bw, bh, 10, 0x66141A2A, 0.9f, 0.16f);
+        Glass.text(ctx, font, fit(font, t.title() + "  -  " + t.artist(), bw - 18), x + 9, y + 5, 0xFFF2F5FA);
         String sub = lines == null ? "Loading lyrics..." : lines.isEmpty() ? "No synced lyrics"
                 : LyricsView.clock(t.positionMs()) + " / " + LyricsView.clock(t.durationMs());
-        ctx.drawTextWithShadow(font, sub, x + 5, y + 14, 0xFFA0A0B0);
+        Glass.text(ctx, font, sub, x + 9, y + 15, 0xFFA4ADBF);
         float p = t.durationMs() > 0 ? LyricsView.clamp01(t.positionMs() / (float) t.durationMs()) : 0;
-        ctx.fill(x, y + 22, x + bw, y + 24, 0x40FFFFFF);
-        ctx.fill(x, y + 22, x + Math.round(bw * p), y + 24, s.colour);
+        int tx = x + 9, tw = bw - 18;
+        Glass.rrect(ctx, tx, y + bh - 6, tw, 2, 1, 0x40FFFFFF);
+        Glass.rrect(ctx, tx, y + bh - 6, Math.max(2, Math.round(tw * p)), 2, 1, s.colour);
     }
 
     private static String fit(TextRenderer font, String text, int maxW) {

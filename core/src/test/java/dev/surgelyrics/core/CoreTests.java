@@ -133,6 +133,51 @@ public final class CoreTests {
         eq("withAlpha", Integer.toHexString(LyricsView.withAlpha(0xFFFFFFFF, 0.5f)), "80ffffff");
         eq("mix mid", LyricsView.mix(0xFF000000, 0xFFFFFFFF, 0.5f) & 0xFF, 127);
 
+        // ---- Motion
+        Motion.Spring sp = new Motion.Spring(0, 260f, 24f);
+        float peak = 0;
+        for (int i = 0; i < 400; i++) { float pv = sp.step(0.016f, 1f); peak = Math.max(peak, pv); }
+        eq("spring settles", sp.pos, 1f);
+        check("spring overshoots a little", peak > 1.0f && peak < 1.2f);
+        Motion.Spring sp2 = new Motion.Spring(0, 260f, 24f);
+        float huge = sp2.step(10f, 1f);
+        check("spring survives huge dt", !Float.isNaN(huge) && Math.abs(huge) < 5);
+        check("spring ignores zero dt", new Motion.Spring(0.3f, 260f, 24f).step(0f, 1f) == 0.3f);
+
+        // ---- Track.merge
+        Track m1 = Track.of("a", "T", "A", "", 200000, 5000, true);
+        check("merge keeps close snapshot", Track.merge(m1, Track.of("a", "T", "A", "", 200000, 5100, true)) == m1);
+        Track far = Track.of("a", "T", "A", "", 200000, 90000, true);
+        check("merge takes seek", Track.merge(m1, far) == far);
+        Track other = Track.of("b", "T2", "A", "", 200000, 5000, true);
+        check("merge takes new song", Track.merge(m1, other) == other);
+        check("merge takes pause", Track.merge(m1, Track.of("a", "T", "A", "", 200000, 5000, false)).playing() == false);
+
+        // ---- WindowsMedia line parsing
+        Track wl = WindowsMedia.parseLine("{\"app\":\"Spotify.exe\",\"title\":\"Hi \\u00e9\",\"artist\":\"A\",\"album\":\"B\",\"pos\":12345,\"dur\":200000,\"playing\":true}");
+        eq("win title", wl.title(), "Hi \u00e9");
+        eq("win pos", wl.positionMs() >= 12345 && wl.positionMs() < 13500, true);
+        eq("win id", wl.id(), "win:hi \u00e9|a");
+        eq("win empty object", WindowsMedia.parseLine("{}"), null);
+        eq("win blank title", WindowsMedia.parseLine("{\"title\":\" \"}"), null);
+        boolean bad = false; try { WindowsMedia.parseLine("not json"); } catch (RuntimeException e) { bad = true; }
+        check("win garbage throws (caught by reader)", bad);
+
+        // ---- NowPlaying selection
+        Settings ns = new Settings();
+        Spotify nsp = new Spotify(ns, dir.resolve("np-auth.json"));
+        WindowsMedia nwm = new WindowsMedia();
+        NowPlaying np = new NowPlaying(ns, nsp, nwm);
+        eq("np none", np.track(), null);
+        Track wt = Track.of("w", "W", "x", "", 1000, 0, true), st = Track.of("s", "S", "y", "", 1000, 0, true);
+        nwm.injectTrackForTest(wt); nsp.injectTrackForTest(st);
+        ns.source = 0; eq("np auto prefers playing windows", np.track().id(), "w");
+        nwm.injectTrackForTest(Track.of("w", "W", "x", "", 1000, 0, false));
+        eq("np auto switches to playing spotify", np.track().id(), "s");
+        ns.source = 1; eq("np windows only", np.track().id(), "w");
+        ns.source = 2; eq("np spotify only", np.track().id(), "s");
+        ns.source = 7; ns.clamp(); eq("source clamped", ns.source, 2);
+
         System.out.println(pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);
     }

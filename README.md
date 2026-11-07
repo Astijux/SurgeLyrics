@@ -34,6 +34,13 @@ java -cp core/out dev.surgelyrics.core.CoreTests   # or run CoreTests from your 
 3. All mixin injectors use `require = 0`, so a wrong method name means that one optimization silently does nothing
    instead of crashing the game. In `latest.log`, search for "surgelyrics" mixin warnings after first launch.
 
-## Spotify setup
+## Audio sources
+Settings (K) -> **Source**: Auto, Windows, or Spotify.
+- **Windows** reads the system media session (the same card as the volume flyout), so Spotify, Apple Music, browsers, VLC and
+  anything else that reports to Windows work, with no login. It runs one hidden PowerShell process that exits when Minecraft does.
+- **Spotify** uses the Spotify Web API (needs a Client ID, below).
+- **Auto** uses whichever is actually playing, preferring Windows.
+
+## Spotify setup (only needed for the Spotify source)
 Create an app at developer.spotify.com, add Redirect URI `http://127.0.0.1:19542/callback`, paste the Client ID
 in settings (K), click Connect. Tokens are stored in `config/surgelyrics-auth.json`, separate from settings.

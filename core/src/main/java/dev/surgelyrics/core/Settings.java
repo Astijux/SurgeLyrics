@@ -18,6 +18,7 @@ public final class Settings {
     public int syncOffsetMs = 0;       // -3000..3000
     public int colour = 0xFF7DD3FC;
     public int colour2 = 0xFFC084FC;
+    public int source = 0;             // 0 auto, 1 Windows media, 2 Spotify API
     public int redirectPort = 19542;
     public String spotifyClientId = "";
     // surge
@@ -33,6 +34,7 @@ public final class Settings {
         sizePercent = Math.max(50, Math.min(200, sizePercent));
         syncOffsetMs = Math.max(-3000, Math.min(3000, syncOffsetMs));
         targetFps = Math.max(30, Math.min(240, targetFps));
+        source = Math.max(0, Math.min(2, source));
         redirectPort = (redirectPort < 1024 || redirectPort > 65535) ? 19542 : redirectPort;
         if (spotifyClientId == null) spotifyClientId = "";
         spotifyClientId = spotifyClientId.strip();
@@ -56,6 +58,7 @@ public final class Settings {
                 s.colour = (int) (long) Json.num(m.get("colour"), s.colour);
                 s.colour2 = (int) (long) Json.num(m.get("colour2"), s.colour2);
                 s.redirectPort = (int) Json.num(m.get("redirectPort"), s.redirectPort);
+                s.source = (int) Json.num(m.get("source"), s.source);
                 s.spotifyClientId = Json.str(m.get("spotifyClientId"), "");
                 s.surgeProfile = Json.str(m.get("surgeProfile"), s.surgeProfile);
                 s.surgeAdaptive = Json.bool(m.get("surgeAdaptive"), s.surgeAdaptive);
@@ -77,7 +80,7 @@ public final class Settings {
         m.put("gradient", gradient); m.put("intensity", intensity); m.put("wordsPerLine", wordsPerLine);
         m.put("staySeconds", (double) staySeconds); m.put("sizePercent", sizePercent);
         m.put("syncOffsetMs", syncOffsetMs); m.put("colour", (long) colour & 0xFFFFFFFFL);
-        m.put("colour2", (long) colour2 & 0xFFFFFFFFL); m.put("redirectPort", redirectPort);
+        m.put("colour2", (long) colour2 & 0xFFFFFFFFL); m.put("redirectPort", redirectPort); m.put("source", source);
         m.put("spotifyClientId", spotifyClientId); m.put("surgeProfile", surgeProfile);
         m.put("surgeAdaptive", surgeAdaptive); m.put("surgeOverlay", surgeOverlay);
         m.put("targetFps", targetFps);

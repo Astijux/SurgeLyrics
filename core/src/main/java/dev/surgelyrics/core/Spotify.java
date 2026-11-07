@@ -32,6 +32,7 @@ public final class Spotify {
 
     public Track track() { return track; }
     public String status() { return status; }
+    void injectTrackForTest(Track t) { track = t; }
     public boolean connected() { return tokens.loggedIn(); }
     public String redirectUri() { return "http://127.0.0.1:" + settings.redirectPort + "/callback"; }
 
@@ -185,10 +186,10 @@ public final class Spotify {
         if (id.isEmpty() || !"track".equals(Json.str(item.get("type"), "track"))) { track = null; status = "Nothing playing"; return; }
         StringJoiner artists = new StringJoiner(", ");
         for (Object a : Json.arr(item.get("artists"))) artists.add(Json.str(Json.obj(a).get("name"), ""));
-        track = Track.of(id, Json.str(item.get("name"), "Unknown"), artists.toString(),
+        track = Track.merge(track, Track.of(id, Json.str(item.get("name"), "Unknown"), artists.toString(),
                 Json.str(Json.obj(item.get("album")).get("name"), ""),
                 (long) Json.num(item.get("duration_ms"), 0), (long) Json.num(m.get("progress_ms"), 0),
-                Json.bool(m.get("is_playing"), false));
+                Json.bool(m.get("is_playing"), false)));
         status = "Connected";
     }
 }

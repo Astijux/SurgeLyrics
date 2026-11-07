@@ -37,7 +37,8 @@ public final class SurgeLyricsClient implements ClientModInitializer {
             }
         });
 
-        ClientLifecycleEvents.CLIENT_STOPPING.register(mc -> { Runtime.SPOTIFY.stop(); Runtime.save(); });
+        ClientLifecycleEvents.CLIENT_STOPPING.register(mc -> { Runtime.SPOTIFY.stop(); Runtime.WINDOWS.stop(); Runtime.save(); });
         Runtime.SPOTIFY.start();   // cheap no-op polling until you connect
+        Runtime.NOW.sync();        // starts Windows audio reading when the Source setting allows it
     }
 }

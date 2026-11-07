@@ -15,6 +15,8 @@ public final class Runtime {
     public static final SurgeGovernor SURGE = new SurgeGovernor();
     public static final LrcLib LYRICS = new LrcLib();
     public static final Spotify SPOTIFY = new Spotify(SETTINGS, TOKEN_FILE);
+    public static final WindowsMedia WINDOWS = new WindowsMedia();
+    public static final NowPlaying NOW = new NowPlaying(SETTINGS, SPOTIFY, WINDOWS);
 
     /** Safe to call any time: pushes current settings into the governor. */
     public static void applySurge() {
