@@ -1,1 +1,24 @@
-
+name: Build mod jar
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: 9.8.2 }
+      - name: Core tests
+        run: |
+          mkdir out && javac -d out $(find core/src -name '*.java') && java -cp out dev.surgelyrics.core.CoreTests
+      - name: Build 1.21.11 jar
+        run: gradle :mc1_21_11:build --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: surgelyrics-1.21.11
+          path: |
+            mc1_21_11/build/libs/surgelyrics-*.jar
+            !mc1_21_11/build/libs/*-sources.jar
