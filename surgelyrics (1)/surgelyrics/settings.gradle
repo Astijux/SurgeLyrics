@@ -1,0 +1,8 @@
+pluginManagement {
+    repositories { maven { url = 'https://maven.fabricmc.net/' }; gradlePluginPortal(); mavenCentral() }
+}
+rootProject.name = 'surgelyrics'
+include 'core'
+include 'mc1_21_11'
+// To add another Minecraft version: copy mc1_21_11 to e.g. mc26_2, change gradle.properties/mappings,
+// port the 5 small adapter classes, and add it here. 'core' never changes.

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "surgelyrics",
+  "version": "${version}",
+  "name": "Surge Lyrics",
+  "description": "Synced Spotify lyrics on your HUD plus Surge FPS culling in one lightweight mod. Press K for settings.",
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": { "client": ["dev.surgelyrics.mc1_21_11.SurgeLyricsClient"] },
+  "mixins": [ { "config": "surgelyrics.mixins.json", "environment": "client" } ],
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
