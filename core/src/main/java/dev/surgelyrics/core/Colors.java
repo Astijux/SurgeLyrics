@@ -58,6 +58,30 @@ public final class Colors {
         }
     }
 
+    /** Accepts "#abc", "abc", "#aabbcc" or "AABBCC" (case-insensitive). @return opaque ARGB, or null if invalid. */
+    public static Integer parseHex(String text) {
+        if (text == null) return null;
+        String t = text.strip();
+        if (t.startsWith("#")) t = t.substring(1);
+        if (t.length() == 3) t = "" + t.charAt(0) + t.charAt(0) + t.charAt(1) + t.charAt(1) + t.charAt(2) + t.charAt(2);
+        if (t.length() != 6) return null;
+        for (int i = 0; i < 6; i++) if (Character.digit(t.charAt(i), 16) < 0) return null;
+        return 0xFF000000 | Integer.parseInt(t, 16);
+    }
+
+    public static String toHex(int argb) { return String.format("#%06X", argb & 0xFFFFFF); }
+
+    /** Red -> yellow -> green for a 0..1 fraction (durability, health...). */
+    public static int health(float pct) {
+        pct = LyricsView.clamp01(pct);
+        return pct > 0.5f ? LyricsView.mix(0xFFFACC15, 0xFF4ADE80, (pct - 0.5f) * 2f)
+                          : LyricsView.mix(0xFFF87171, 0xFFFACC15, pct * 2f);
+    }
+
+    public static int pingColor(int ms) {
+        return ms < 60 ? 0xFF4ADE80 : ms < 120 ? 0xFFFACC15 : ms < 200 ? 0xFFFB923C : 0xFFF87171;
+    }
+
     /** Blend toward black by amount 0..1, keeping the colour's alpha. */
     public static int darken(int argb, float amount) {
         float k = 1f - LyricsView.clamp01(amount);

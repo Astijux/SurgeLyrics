@@ -282,7 +282,8 @@ public final class CoreTests {
         // ---- FontStyle + new settings
         eq("default font has no id", FontStyle.DEFAULT.fontId(), null);
         eq("script font id", FontStyle.SCRIPT.fontId(), "surgelyrics:script");
-        eq("font index clamps", FontStyle.of(99), FontStyle.PIXEL);
+        eq("font index clamps", FontStyle.of(99), FontStyle.PIXELSANS);
+        eq("font index clamps low", FontStyle.of(-5), FontStyle.DEFAULT);
         Settings ns2 = new Settings();
         ns2.displayMode = 9; ns2.font = -3; ns2.anchor = 40; ns2.offX = 9999; ns2.depthAmount = 0; ns2.lightAngle = -90;
         ns2.glowStrength = 500; ns2.opacity = 0; ns2.gradientMode = 7; ns2.gradientSpeed = 0; ns2.clamp();
@@ -292,6 +293,81 @@ public final class CoreTests {
         ns2.font = 1; ns2.depthStyle = 1; ns2.window3d = false; ns2.save(nf);
         Settings ns3 = Settings.load(nf);
         eq("new settings roundtrip", ns3.font + "," + ns3.depthStyle + "," + ns3.window3d + "," + ns3.lightAngle, "1,1,false,270");
+
+        // ---- fonts
+        check("all font keys unique", java.util.Arrays.stream(FontStyle.values()).map(fnt -> fnt.key).distinct().count() == FontStyle.values().length);
+        check("23 fonts, 3 pages", FontStyle.values().length == 23 && FontStyle.pages() == 3);
+        check("every font key is a legal resource name", java.util.Arrays.stream(FontStyle.values()).filter(fnt -> fnt.key != null).allMatch(fnt -> fnt.key.matches("[a-z0-9_]+")));
+
+        // ---- hex colours
+        eq("hex 6", Integer.toHexString(Colors.parseHex("#7dd3fc")), "ff7dd3fc");
+        eq("hex no hash upper", Integer.toHexString(Colors.parseHex("FFAA00")), "ffffaa00");
+        eq("hex shorthand", Integer.toHexString(Colors.parseHex("#0af")), "ff00aaff");
+        eq("hex whitespace", Integer.toHexString(Colors.parseHex("  #112233 ")), "ff112233");
+        eq("hex bad digit", Colors.parseHex("#12345g"), null);
+        eq("hex bad length", Colors.parseHex("#12345"), null);
+        eq("hex empty", Colors.parseHex(""), null);
+        eq("hex null", Colors.parseHex(null), null);
+        eq("hex format", Colors.toHex(0xFF0A1B2C), "#0A1B2C");
+        eq("hex roundtrip", Colors.toHex(Colors.parseHex("#c084fc")), "#C084FC");
+        check("health green vs red", (Colors.health(1f) >> 8 & 255) > 200 && (Colors.health(0f) >> 16 & 255) > 200);
+        eq("ping good", Colors.pingColor(20), 0xFF4ADE80);
+        eq("ping bad", Colors.pingColor(500), 0xFFF87171);
+
+        // ---- Fmt
+        eq("duration short", Fmt.duration(83_000), "1:23");
+        eq("duration hour", Fmt.duration(3_725_000), "1:02:05");
+        eq("duration negative", Fmt.duration(-5), "0:00");
+        eq("fixed 2", Fmt.fixed(3.0, 2), "3.00");
+        eq("fixed round", Fmt.fixed(3.14159, 2), "3.14");
+        eq("fixed 1", Fmt.fixed(2.96, 1), "3.0");
+        eq("fixed 3", Fmt.fixed(1.5, 3), "1.500");
+
+        // ---- Reach
+        eq("reach in front", Reach.distance(0, 0, 0, 3, -1, -1, 4, 1, 1), 3.0);
+        eq("reach inside box is 0", Reach.distance(0.5, 0.5, 0.5, 0, 0, 0, 1, 1, 1), 0.0);
+        check("reach diagonal", Math.abs(Reach.distance(0, 0, 0, 3, 4, -1, 5, 6, 1) - 5.0) < 1e-9);
+
+        // ---- ClickCounter
+        ClickCounter cc2 = new ClickCounter();
+        for (int i = 0; i < 7; i++) cc2.click(10_000 + i * 100);
+        eq("cps counts a second", cc2.cps(10_650), 7);
+        eq("cps expires", cc2.cps(11_300), 3);
+        eq("cps empty", cc2.cps(99_999), 0);
+
+        // ---- CombatState
+        CombatState cs2 = new CombatState();
+        cs2.setTimeoutMs(3000);
+        cs2.hit(1000, 2.9); cs2.hit(1500, 3.1); cs2.hit(2000, 3.4);
+        eq("combo builds", cs2.combo(2100), 3);
+        eq("reach is last hit", cs2.reach(2100), 3.4);
+        eq("combo times out", cs2.combo(6000), 0);
+        eq("reach fades", cs2.reach(7000), -1.0);
+        cs2.hit(7000, 2.0); cs2.hit(7200, 2.1);
+        eq("combo restarts after timeout", cs2.combo(7300), 2);
+        cs2.damaged();
+        eq("damage ends the combo", cs2.combo(7300), 0);
+        eq("best combo remembered", cs2.best(), 3);
+        cs2.hit(7400, 2.0); eq("hit after damage starts at 1", cs2.combo(7400), 1);
+
+        // ---- HudWidget + settings
+        HudWidget hw = new HudWidget(true, 99, 9999, -9999);
+        hw.scale = 1000; hw.color = 0x00112233; hw.clamp();
+        eq("widget clamps", hw.anchor + "," + hw.offX + "," + hw.offY + "," + hw.scale + "," + Integer.toHexString(hw.color), "8,300,-300,200,ff112233");
+        Settings hs = new Settings();
+        hs.armor.on = false; hs.keys.anchor = 2; hs.reach.on = true; hs.combo.scale = 150; hs.ping.color = 0xFFAA00FF;
+        hs.armorDur = 3; hs.armorVertical = false; hs.timerMode = 1; hs.reachDecimals = 3; hs.comboSeconds = 7; hs.keysCps = false;
+        Path hf = dir.resolve("hud.json"); hs.save(hf);
+        Settings hl = Settings.load(hf);
+        eq("hud widgets roundtrip", hl.armor.on + "," + hl.keys.anchor + "," + hl.reach.on + "," + hl.combo.scale + "," + Integer.toHexString(hl.ping.color),
+                "false,2,true,150,ffaa00ff");
+        eq("hud options roundtrip", hl.armorDur + "," + hl.armorVertical + "," + hl.timerMode + "," + hl.reachDecimals + "," + hl.comboSeconds + "," + hl.keysCps,
+                "3,false,1,3,7,false");
+        Files.writeString(hf, "{\"hud\":{\"armor\":{\"scale\":5000,\"anchor\":-4}},\"armorDur\":42,\"comboSeconds\":0}");
+        Settings hb = Settings.load(hf);
+        eq("hud loads clamp bad values", hb.armor.scale + "," + hb.armor.anchor + "," + hb.armorDur + "," + hb.comboSeconds, "200,0,3,1");
+        eq("hud missing widgets keep defaults", hb.keys.on + "," + hb.timer.anchor, "true,0");
+        eq("six widgets", new Settings().widgets().length, 6);
 
         System.out.println(pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);

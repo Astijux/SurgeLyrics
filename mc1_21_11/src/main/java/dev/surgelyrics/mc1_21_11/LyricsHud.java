@@ -14,6 +14,7 @@ import java.util.List;
 public final class LyricsHud implements HudElement {
     static volatile int lastFps, lastLow;
     static boolean previewMode;                 // settings preview ignores the Surge lighten rule
+    private final HudWidgets widgets = new HudWidgets();
     private int fps, low;
 
     @Override
@@ -36,6 +37,8 @@ public final class LyricsHud implements HudElement {
             Glass.text(ctx, tr, t1, 8, 6, 0xFFF2F5FA);
             Glass.text(ctx, tr, t2, 8, 16, 0xFFA4ADBF);
         }
+
+        widgets.render(ctx, mc, tr, sw, sh);
 
         if (!s.lyricsEnabled) return;
         Track track = Runtime.NOW.track();

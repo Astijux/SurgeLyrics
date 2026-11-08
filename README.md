@@ -36,11 +36,16 @@ java -cp core/out dev.surgelyrics.core.CoreTests   # or run CoreTests from your 
 
 ## Look and feel (all in the K menu)
 - **Display modes:** Chunk (a few words at a time), Line, Type (typewriter), Sing (karaoke fill), Scroll (previous / current / next).
-- **Fonts:** Default, Script (cursive), Serif Italic, Elegant, Deco, Modern, Tech, Pixel. The picker shows each font in itself.
+- **Fonts:** 23 of them (Script cursive, italic and classic serifs, display, heavy, narrow, mono, techno, pixel, ...), paged, each shown in itself.
   To add one: drop `name.ttf` + `name.json` into `assets/surgelyrics/font/` and add a line to `FontStyle`.
 - **Layout:** 3x3 anchor grid with a mini-screen, plus horizontal/vertical offsets, and the bar at top or bottom-left.
-- **Colour:** 12 presets, full hue/saturation/brightness editing for both colours, gradient Off / Static / Flow / Rainbow.
+- **Colour:** 12 presets, a hex box (#RRGGBB or #RGB), hue/saturation/brightness sliders with gradient tracks, gradient Off / Static / Flow / Rainbow.
 - **Effects:** flat, 3D extruded (thickness + light angle) or outline text; glow strength; motion; a 3D settings window that leans with the mouse.
+
+## HUD widgets (HUD tab)
+Armor status (icons, durability as bar / number / percent, vertical or horizontal, optional held items), keystrokes (WASD, space,
+mouse buttons with CPS), ping, session timer (since launch or since joining the world), reach of your last hit, combo counter.
+Each has its own position grid, offsets, scale, colour (hex), and optional glass background.
 
 ## Surge (FPS booster)
 - **Profiles:** Vanilla, Balanced, Aggressive, Potato, Extreme, PvP (long mob sight, cheap everything else) and Custom.

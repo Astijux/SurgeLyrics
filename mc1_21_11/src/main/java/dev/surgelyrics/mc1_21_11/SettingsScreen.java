@@ -10,30 +10,40 @@ import org.lwjgl.glfw.GLFW;
 
 import java.net.URI;
 import java.util.List;
+import java.util.function.IntConsumer;
 
 /**
- * Liquid-glass settings window. Eight tabs, a font picker that previews each font in itself, a placement
- * grid with a mini-screen, full colour control, 3D text options, and an optional floating 3D window that
- * leans with the mouse. Drawn immediate-mode over the game's background blur; the mouse is polled from GLFW.
+ * Liquid-glass settings window. Nine tabs: lyrics, a paged font picker (each font previewed in itself), placement,
+ * colour with hex input and gradient tracks, 3D effects, HUD widgets, and Surge. The window can float in 3D and lean
+ * with the mouse. Drawn immediate-mode over the game's background blur; the mouse is polled from GLFW.
  */
 public final class SettingsScreen extends Screen {
-    private static final int W = 380, H = 262;
-    private static final String[] TABS = {"Lyrics", "Style", "Layout", "Colour", "Effects", "Surge", "Culling", "Source"};
+    private static final int W = 420, H = 262;
+    private static final String[] TABS = {"Lyrics", "Style", "Layout", "Colour", "Effects", "HUD", "Surge", "Culling", "Source"};
     private static final String[] MOTION = {"Calm", "Normal", "Lively"};
     private static final String[] SOURCES = {"Auto", "Windows", "Spotify"};
     private static final String[] DEPTH = {"Flat", "3D", "Outline"};
     private static final String[] BAR = {"Top", "Bottom left"};
     private static final String[] EDIT = {"Primary", "Secondary"};
+    private static final String[] WIDGETS = {"Armor", "Keys", "Ping", "Timer", "Reach", "Combo"};
+    private static final String[] ARMOR_LAYOUT = {"Vertical", "Horizontal"};
+    private static final String[] DURABILITY = {"None", "Bar", "Number", "Percent"};
+    private static final String[] TIMER_MODE = {"Game launch", "World join"};
+    private static final int[] QUICK = {0xFF7DD3FC, 0xFFC084FC, 0xFFF9A8D4, 0xFFFDE68A, 0xFF86EFAC, 0xFFFDA4AF, 0xFF5EEAD4, 0xFFFFFFFF};
+    private static final int[] HUE_STOPS = {0xFFFF0000, 0xFFFFFF00, 0xFF00FF00, 0xFF00FFFF, 0xFF0000FF, 0xFFFF00FF, 0xFFFF0000};
     private static final int TEXT = 0xFFF2F5FA, DIM = 0xFFA4ADBF, FAINT = 0xFF7C8598;
-    private static int lastTab = 0;
+    private static int lastTab = 0, fontPage = -1, hudSel = 0;
     private static boolean editSecond = false;
 
     private final Screen parent;
     private final GlassUi ui = new GlassUi();
     private final Motion.Spring open = new Motion.Spring(0f, 200f, 22f);
-    private TextFieldWidget idField;
+    private TextFieldWidget idField, hexField;
     private long lastNanos = System.nanoTime();
-    private boolean closing;
+    private boolean closing, hexSetting;
+    private String hexKey = "";
+    private IntConsumer hexTarget;
+    private float curOx, curOy, curS = 1f;
 
     public SettingsScreen(Screen parent) { super(Text.literal("Surge Lyrics")); this.parent = parent; }
 
@@ -47,6 +57,41 @@ public final class SettingsScreen extends Screen {
         idField.setChangedListener(t -> Runtime.SETTINGS.spotifyClientId = t.strip());
         idField.visible = false;
         addSelectableChild(idField);
+
+        hexField = new TextFieldWidget(textRenderer, 0, 0, 70, 12, Text.literal("Hex colour"));
+        hexField.setDrawsBackground(false);
+        hexField.setMaxLength(8);
+        hexField.setPlaceholder(Text.literal("#RRGGBB"));
+        hexField.setChangedListener(t -> {
+            if (hexSetting || hexTarget == null) return;
+            Integer c = Colors.parseHex(t);
+            if (c != null) hexTarget.accept(c);          // only valid codes apply, so typing never breaks anything
+        });
+        hexField.visible = false;
+        addSelectableChild(hexField);
+
+        if (fontPage < 0) fontPage = Runtime.SETTINGS.font / FontStyle.PER_PAGE;
+    }
+
+    /** Point the shared hex box at a colour. Doesn't overwrite what you're typing while it has focus. */
+    private void hexBind(String key, int colour, IntConsumer target) {
+        hexTarget = target;
+        hexField.visible = true;
+        if (!key.equals(hexKey) || !hexField.isFocused()) {
+            String want = Colors.toHex(colour);
+            if (!want.equalsIgnoreCase(hexField.getText())) { hexSetting = true; hexField.setText(want); hexSetting = false; }
+        }
+        hexKey = key;
+    }
+
+    private void hexPill(DrawContext ctx, int x, int y, int w, int colour) {
+        boolean valid = Colors.parseHex(hexField.getText()) != null;
+        Glass.panel(ctx, x, y, w, 16, 8, valid ? 0x34000000 : 0x66F87171, 0.5f, 0f);
+        Glass.panel(ctx, x + 4, y + 3, 10, 10, 5, colour, 0.9f, 0.3f);
+        hexField.setX(Math.round(curOx + (x + 20) * curS));
+        hexField.setY(Math.round(curOy + (y + 4) * curS));
+        hexField.setWidth(Math.round((w - 26) * curS));
+        hexField.setHeight(Math.max(10, Math.round(9 * curS)));
     }
 
     @Override
@@ -70,6 +115,7 @@ public final class SettingsScreen extends Screen {
         float fit = Math.min(1f, Math.min((height - 12f) / H, (width - 12f) / W));
         float s = fit * (0.94f + 0.06f * Math.min(1f, o));
         float ox = (width - W * s) / 2f - pdx * 0.5f, oy = (height - H * s) / 2f - pdy * 0.5f;
+        curOx = ox; curOy = oy; curS = s;
 
         boolean down = GLFW.glfwGetMouseButton(client.getWindow().getHandle(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
         ui.begin(ctx, textRenderer, (mouseX - ox) / s, (mouseY - oy) / s, down, dt);
@@ -85,16 +131,23 @@ public final class SettingsScreen extends Screen {
             for (int i = 4; i >= 1; i--)
                 Glass.rrect(ctx, Math.round(pdx * i * 0.35f), Math.round(pdy * i * 0.35f + i * 0.7f), W, H, 18, 0x26101828);
         }
+        Glass.rimTint = accent & 0xFFFFFF;                 // rim light picks up your accent colour
         Glass.panel(ctx, 0, 0, W, H, 18, 0x70141A2A, 1f, 0.17f);
+        Glass.rimTint = 0;
+        Glass.sweep(ctx, 0, 0, W, H, 18, (LyricsHud.time() % 8f) / 8f);
 
-        ui.label("Surge Lyrics", 16, 12, TEXT);
-        Glass.textRight(ctx, textRenderer, "K to reopen", W - 40, 12, FAINT);
+        // header: brand mark, title, dividers
+        Glass.panel(ctx, 16, 10, 14, 14, 7, accent, 0.9f, 0.3f);
+        Glass.rrect(ctx, 22, 16, 6, 6, 3, st.colour2);
+        ui.label("Surge Lyrics", 38, 13, TEXT);
+        Glass.textRight(ctx, textRenderer, "K to reopen", W - 40, 13, FAINT);
         if (ui.button("close", W - 30, 8, 16, 16, "x", accent, false)) closing = true;
-
         lastTab = ui.segmented("tabs", 14, 30, W - 28, TABS, lastTab, accent);
+        Glass.rrect(ctx, 16, 52, W - 32, 1, 0, 0x1EFFFFFF);
 
         boolean surgeChanged = false, sourceChanged = false;
         idField.visible = false;
+        hexField.visible = false;
         final int lx = 16, cx = 134, cw = W - 14 - cx, rv = W - 16, rh = 22, tg = W - 44;
         int y = 60;
 
@@ -118,12 +171,19 @@ public final class SettingsScreen extends Screen {
             }
             case 1 -> {
                 FontStyle[] fs = FontStyle.values();
-                int chipW = (W - 32 - 18) / 4;
-                for (int i = 0; i < fs.length; i++) {
-                    int cxp = lx + (i % 4) * (chipW + 6), cyp = y + (i / 4) * 22;
+                int chipW = (W - 32 - 18) / 4, start = fontPage * FontStyle.PER_PAGE;
+                for (int j = 0; j < FontStyle.PER_PAGE; j++) {
+                    int i = start + j;
+                    if (i >= fs.length) break;
+                    int cxp = lx + (j % 4) * (chipW + 6), cyp = y + (j / 4) * 22;
                     if (ui.chip("font" + i, cxp, cyp, chipW, 18, fs[i].label, fs[i].fontId(), st.font == i, accent)) st.font = i;
                 }
-                y += 2 * rh + 6;
+                y += 2 * rh + 2;
+                int pages = FontStyle.pages();
+                if (ui.button("fp-", lx, y, 24, 16, "<", accent, false)) fontPage = (fontPage + pages - 1) % pages;
+                Glass.textCentered(ctx, textRenderer, "Fonts  " + (fontPage + 1) + " / " + pages + "   (" + fs.length + " total)", W / 2, y + 4, DIM);
+                if (ui.button("fp+", W - 16 - 24, y, 24, 16, ">", accent, false)) fontPage = (fontPage + 1) % pages;
+                y += 24;
                 ui.label("Size", lx, y + 3, TEXT);
                 st.sizePercent = Math.round(ui.slider("size", cx, y, cw - 44, st.sizePercent, 50, 200, 5, accent));
                 Glass.textRight(ctx, textRenderer, st.sizePercent + "%", rv, y + 4, DIM); y += rh;
@@ -132,25 +192,8 @@ public final class SettingsScreen extends Screen {
                 Glass.textRight(ctx, textRenderer, st.opacity + "%", rv, y + 4, DIM);
             }
             case 2 -> {
-                // mini screen doubling as the anchor picker
-                int mx0 = lx, my0 = y, mw = 120, mh = 68, cw3 = mw / 3, ch3 = mh / 3;
-                Glass.panel(ctx, mx0, my0, mw, mh, 8, 0x30000000, 0.6f, 0.1f);
-                for (int a = 0; a < 9; a++) {
-                    int gx = mx0 + (a % 3) * cw3, gy = my0 + (a / 3) * ch3;
-                    boolean hov = ui.hover(gx, gy, cw3, ch3), sel = st.anchor == a;
-                    float sp = ui.anim("anc" + a, sel ? 1 : 0, sel ? 1 : 0);
-                    if (sp > 0.02f || hov)
-                        Glass.panel(ctx, gx + 2, gy + 2, cw3 - 4, ch3 - 4, 5,
-                                LyricsView.mix(hov ? 0x26FFFFFF : 0x00FFFFFF, (0x70 << 24) | (accent & 0xFFFFFF), LyricsView.clamp01(sp)),
-                                sel ? 0.9f : 0.4f, 0.2f);
-                    if (hov && ui.pressed) st.anchor = a;
-                }
-                int[] pp = Layout.place(st.anchor, st.offX, st.offY, 427, 240, 200, 22);
-                int pw = Math.round(200 * mw / 427f), px = mx0 + Math.round(pp[0] * mw / 427f) - pw / 2, py = my0 + Math.round(pp[1] * mh / 240f) - 2;
-                Glass.rrect(ctx, px, py, pw, 5, 2, 0xFFFFFFFF);
-                Glass.rrect(ctx, px + 1, py + 1, Math.max(1, pw - 2), 3, 1, accent);
-
-                int rx = 150, sx = 226, sww = 84;
+                st.anchor = anchorGrid(ctx, "anc", lx, y, st.anchor, st.offX, st.offY, 200, 22, accent);
+                int rx = 150, sx = 226, sww = W - 16 - 56 - sx;
                 ui.label("Horizontal", rx, y + 3, TEXT);
                 st.offX = Math.round(ui.slider("ox", sx, y, sww, st.offX, -300, 300, 5, accent));
                 Glass.textRight(ctx, textRenderer, String.valueOf(st.offX), rv, y + 4, DIM);
@@ -159,11 +202,9 @@ public final class SettingsScreen extends Screen {
                 Glass.textRight(ctx, textRenderer, String.valueOf(st.offY), rv, y + rh + 4, DIM);
                 if (ui.button("reset", rx, y + 2 * rh, 110, 18, "Reset position", accent, false)) { st.anchor = 4; st.offX = 0; st.offY = 30; }
                 Glass.text(ctx, textRenderer, "Anchor: " + Layout.ANCHORS[st.anchor], rx, y + 2 * rh + 26, DIM);
-
-                int by = my0 + mh + 14;
+                int by = y + 68 + 14;
                 ui.label("Now-playing bar", lx, by + 3, TEXT);
-                int bsel = ui.segmented("barpos", cx + 20, by, 190, BAR, st.barBottom ? 1 : 0, accent);
-                st.barBottom = bsel == 1;
+                st.barBottom = ui.segmented("barpos", cx + 20, by, 190, BAR, st.barBottom ? 1 : 0, accent) == 1;
                 Glass.text(ctx, textRenderer, "Click a cell to move the lyrics, then nudge with the sliders.", lx, by + 28, FAINT);
             }
             case 3 -> {
@@ -173,22 +214,29 @@ public final class SettingsScreen extends Screen {
                 if (pick >= 0) { st.colour = ps.get(pick).c1(); st.colour2 = ps.get(pick).c2(); }
                 y += rh;
                 ui.label("Edit", lx, y + 3, TEXT);
-                editSecond = ui.segmented("edit", cx, y, 150, EDIT, editSecond ? 1 : 0, accent) == 1; y += rh;
-                int cur = editSecond ? st.colour2 : st.colour;
+                editSecond = ui.segmented("edit", cx, y, 150, EDIT, editSecond ? 1 : 0, accent) == 1;
+                final boolean second = editSecond;
+                int cur = second ? st.colour2 : st.colour;
+                hexBind("lyr" + second, cur, c -> { if (second) st.colour2 = c; else st.colour = c; });
+                hexPill(ctx, cx + 160, y, cw - 160, cur);
+                y += rh;
                 float[] hsb = Colors.toHsb(cur);
                 int h0 = Math.round(hsb[0] * 360), s0 = Math.round(hsb[1] * 100), b0 = Math.round(hsb[2] * 100);
                 ui.label("Hue", lx, y + 3, TEXT);
+                ui.trackStops = HUE_STOPS;
                 int h1 = Math.round(ui.slider("hue", cx, y, cw - 44, h0, 0, 360, 1, cur));
                 Glass.textRight(ctx, textRenderer, h1 + "\u00b0", rv, y + 4, DIM); y += rh;
                 ui.label("Saturation", lx, y + 3, TEXT);
+                ui.trackStops = new int[]{Colors.fromHsb(h1 / 360f, 0f, 1f), Colors.fromHsb(h1 / 360f, 1f, 1f)};
                 int s1 = Math.round(ui.slider("sat", cx, y, cw - 44, s0, 0, 100, 1, cur));
                 Glass.textRight(ctx, textRenderer, s1 + "%", rv, y + 4, DIM); y += rh;
                 ui.label("Brightness", lx, y + 3, TEXT);
+                ui.trackStops = new int[]{0xFF000000, Colors.fromHsb(h1 / 360f, s1 / 100f, 1f)};
                 int b1 = Math.round(ui.slider("bri", cx, y, cw - 44, b0, 0, 100, 1, cur));
                 Glass.textRight(ctx, textRenderer, b1 + "%", rv, y + 4, DIM); y += rh;
                 if (h1 != h0 || s1 != s0 || b1 != b0) {            // only write back when you actually moved a slider
                     int nc = Colors.fromHsb(h1 / 360f, s1 / 100f, b1 / 100f);
-                    if (editSecond) st.colour2 = nc; else st.colour = nc;
+                    if (second) st.colour2 = nc; else st.colour = nc;
                 }
                 ui.label("Gradient", lx, y + 3, TEXT);
                 st.gradientMode = ui.segmented("grad", cx, y, cw, Colors.GRADIENT_MODES, st.gradientMode, accent); y += rh;
@@ -215,6 +263,73 @@ public final class SettingsScreen extends Screen {
                 st.window3d = ui.toggle("w3d", tg, y, st.window3d, accent);
             }
             case 5 -> {
+                HudWidget[] ws = st.widgets();
+                int chipW = (W - 32 - 5 * 5) / 6;
+                for (int i = 0; i < ws.length; i++)
+                    if (ui.chip("hw" + i, lx + i * (chipW + 5), y, chipW, 18, WIDGETS[i], null, hudSel == i, accent)) hudSel = i;
+                final HudWidget cfg = ws[hudSel];
+                y += 26;
+                int[] vs = switch (hudSel) { case 0 -> new int[]{60, 80}; case 1 -> new int[]{68, 70}; default -> new int[]{74, 18}; };
+                cfg.anchor = anchorGrid(ctx, "ha", lx, y, cfg.anchor, cfg.offX, cfg.offY, vs[0], vs[1], accent);
+                int rx = 150, sx = 226, sww = W - 16 - 56 - sx;
+                ui.label("Horizontal", rx, y + 3, TEXT);
+                cfg.offX = Math.round(ui.slider("hox" + hudSel, sx, y, sww, cfg.offX, -300, 300, 2, accent));
+                Glass.textRight(ctx, textRenderer, String.valueOf(cfg.offX), rv, y + 4, DIM);
+                ui.label("Vertical", rx, y + rh + 3, TEXT);
+                cfg.offY = Math.round(ui.slider("hoy" + hudSel, sx, y + rh, sww, cfg.offY, -300, 300, 2, accent));
+                Glass.textRight(ctx, textRenderer, String.valueOf(cfg.offY), rv, y + rh + 4, DIM);
+                ui.label("Scale", rx, y + 2 * rh + 3, TEXT);
+                cfg.scale = Math.round(ui.slider("hsc" + hudSel, sx, y + 2 * rh, sww, cfg.scale, 50, 200, 5, accent));
+                Glass.textRight(ctx, textRenderer, cfg.scale + "%", rv, y + 2 * rh + 4, DIM);
+                y += 68 + 8;
+                ui.label("Enabled", lx, y + 3, TEXT);
+                cfg.on = ui.toggle("hon" + hudSel, lx + 56, y, cfg.on, accent);
+                ui.label("Glass background", 150, y + 3, TEXT);
+                cfg.bg = ui.toggle("hbg" + hudSel, tg, y, cfg.bg, accent);
+                y += rh;
+                ui.label("Colour", lx, y + 3, TEXT);
+                hexBind("hud" + hudSel, cfg.color, c -> cfg.color = c);
+                hexPill(ctx, lx + 56, y, 108, cfg.color);
+                cfg.color = ui.swatches("hq" + hudSel, 178, y + 1, QUICK, cfg.color);
+                y += rh;
+                switch (hudSel) {
+                    case 0 -> {
+                        ui.label("Layout", lx, y + 3, TEXT);
+                        st.armorVertical = ui.segmented("alay", cx, y, 130, ARMOR_LAYOUT, st.armorVertical ? 0 : 1, accent) == 0;
+                        ui.label("Held items", 280, y + 3, TEXT);
+                        st.armorHands = ui.toggle("ahand", tg, y, st.armorHands, accent); y += rh;
+                        ui.label("Durability", lx, y + 3, TEXT);
+                        st.armorDur = ui.segmented("adur", cx, y, cw, DURABILITY, st.armorDur, accent);
+                    }
+                    case 1 -> {
+                        ui.label("Mouse", lx, y + 3, TEXT);
+                        st.keysMouse = ui.toggle("kmouse", lx + 44, y, st.keysMouse, accent);
+                        ui.label("Space bar", 110, y + 3, TEXT);
+                        st.keysSpace = ui.toggle("kspace", 110 + 58, y, st.keysSpace, accent);
+                        ui.label("CPS", 214, y + 3, TEXT);
+                        st.keysCps = ui.toggle("kcps", 214 + 28, y, st.keysCps, accent);
+                    }
+                    case 2 -> {
+                        ui.label("Colour by quality", lx, y + 3, TEXT);
+                        st.pingColorize = ui.toggle("pcol", lx + 110, y, st.pingColorize, accent);
+                    }
+                    case 3 -> {
+                        ui.label("Counts from", lx, y + 3, TEXT);
+                        st.timerMode = ui.segmented("tmode", cx, y, 200, TIMER_MODE, st.timerMode, accent);
+                    }
+                    case 4 -> {
+                        ui.label("Decimals", lx, y + 3, TEXT);
+                        st.reachDecimals = Math.round(ui.slider("rdec", cx, y, cw - 44, st.reachDecimals, 1, 3, 1, accent));
+                        Glass.textRight(ctx, textRenderer, String.valueOf(st.reachDecimals), rv, y + 4, DIM);
+                    }
+                    default -> {
+                        ui.label("Resets after", lx, y + 3, TEXT);
+                        st.comboSeconds = Math.round(ui.slider("cmbs", cx, y, cw - 44, st.comboSeconds, 1, 10, 1, accent));
+                        Glass.textRight(ctx, textRenderer, st.comboSeconds + "s idle", rv, y + 4, DIM);
+                    }
+                }
+            }
+            case 6 -> {
                 SurgeProfile[] ps = SurgeProfile.values();
                 SurgeProfile curP = SurgeProfile.byName(st.surgeProfile);
                 int chipW = (W - 32 - 18) / 4;
@@ -253,7 +368,7 @@ public final class SettingsScreen extends Screen {
                 Glass.text(ctx, textRenderer, "Live: " + LyricsHud.lastFps + " fps, 1% low " + LyricsHud.lastLow
                         + "   ranges at " + Math.round(Runtime.SURGE.scale() * 100) + "%", lx, y + 12, FAINT);
             }
-            case 6 -> {
+            case 7 -> {
                 final int r2 = 20;
                 SurgeProfile curP = SurgeProfile.byName(st.surgeProfile);
                 ui.label("Custom limits", lx, y + 3, TEXT);
@@ -274,7 +389,7 @@ public final class SettingsScreen extends Screen {
                         || before[4] != st.cNametag || before[5] != st.cParticleDist || before[6] != st.cParticleCap;
                 ui.label("Hide clouds", lx, y + 3, TEXT);
                 boolean cc = ui.toggle("ccl", lx + 76, y, st.cClouds, accent);
-                ui.label("Hide weather", 196, y + 3, TEXT);
+                ui.label("Hide weather", 230, y + 3, TEXT);
                 boolean cw2 = ui.toggle("cwx", tg, y, st.cWeather, accent);
                 if (cc != st.cClouds || cw2 != st.cWeather) { st.cClouds = cc; st.cWeather = cw2; moved = true; }
                 if (moved) { st.surgeProfile = SurgeProfile.CUSTOM.name(); surgeChanged = true; }
@@ -308,6 +423,7 @@ public final class SettingsScreen extends Screen {
         // live preview, in the real renderer, for every tab that changes how lyrics look
         if (lastTab <= 1 || lastTab == 3 || lastTab == 4) {
             int py = H - 46;
+            Glass.rrect(ctx, 16, py - 6, W - 32, 1, 0, 0x1EFFFFFF);
             Glass.panel(ctx, 14, py, W - 28, 34, 12, 0x2A000000, 0.5f, 0.12f);
             String sample = "Glass lyrics look like this";
             float t = LyricsHud.time();
@@ -325,7 +441,30 @@ public final class SettingsScreen extends Screen {
         if (surgeChanged) Runtime.applySurge();
         if (sourceChanged) Runtime.NOW.sync();
         if (idField.visible) idField.render(ctx, mouseX, mouseY, delta);
+        if (hexField.visible) hexField.render(ctx, mouseX, mouseY, delta);
         Glass.alpha = 1f;
+    }
+
+    /** Mini screen that doubles as a 3x3 anchor picker; shows where the box lands with the current offsets. */
+    private int anchorGrid(DrawContext ctx, String id, int x, int y, int anchor, int offX, int offY, int vw, int vh, int accent) {
+        final int mw = 120, mh = 68, cw3 = mw / 3, ch3 = mh / 3;
+        Glass.panel(ctx, x, y, mw, mh, 8, 0x30000000, 0.6f, 0.1f);
+        for (int a = 0; a < 9; a++) {
+            int gx = x + (a % 3) * cw3, gy = y + (a / 3) * ch3;
+            boolean hov = ui.hover(gx, gy, cw3, ch3), sel = anchor == a;
+            float sp = ui.anim(id + a, sel ? 1 : 0, sel ? 1 : 0);
+            if (sp > 0.02f || hov)
+                Glass.panel(ctx, gx + 2, gy + 2, cw3 - 4, ch3 - 4, 5,
+                        LyricsView.mix(hov ? 0x26FFFFFF : 0x00FFFFFF, (0x70 << 24) | (Runtime.SETTINGS.colour & 0xFFFFFF), LyricsView.clamp01(sp)),
+                        sel ? 0.9f : 0.4f, 0.2f);
+            if (hov && ui.pressed) anchor = a;
+        }
+        int[] pp = Layout.place(anchor, offX, offY, 427, 240, vw, vh);
+        int pw = Math.max(4, Math.round(vw * mw / 427f)), ph = Math.max(3, Math.round(vh * mh / 240f));
+        int px = x + Math.round(pp[0] * mw / 427f) - pw / 2, py = y + Math.round(pp[1] * mh / 240f) - ph / 2;
+        Glass.rrect(ctx, px, py, pw, ph, Math.min(2, ph / 2), 0xFFFFFFFF);
+        if (pw > 2 && ph > 2) Glass.rrect(ctx, px + 1, py + 1, pw - 2, ph - 2, Math.min(1, ph / 2), Runtime.SETTINGS.colour);
+        return anchor;
     }
 
     /** One labelled slider row for the Culling tab. 0 shows as "off" for distances. */

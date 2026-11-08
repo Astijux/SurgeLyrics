@@ -14,6 +14,8 @@ public final class Runtime {
     public static final Settings SETTINGS = Settings.load(SETTINGS_FILE);
     public static final SurgeGovernor SURGE = new SurgeGovernor();
     public static final FrameStats FRAMES = new FrameStats();
+    public static final CombatState COMBAT = new CombatState();
+    public static final long LAUNCH_MS = System.currentTimeMillis();
     public static final LrcLib LYRICS = new LrcLib();
     public static final Spotify SPOTIFY = new Spotify(SETTINGS, TOKEN_FILE);
     public static final WindowsMedia WINDOWS = new WindowsMedia();

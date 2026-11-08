@@ -32,6 +32,17 @@ public final class Settings {
     public int source = 0;             // 0 auto, 1 Windows media, 2 Spotify API
     public int redirectPort = 19542;
     public String spotifyClientId = "";
+    // HUD widgets
+    public final HudWidget armor = new HudWidget(true, 5, 0, 0), keys = new HudWidget(true, 6, 6, -52),
+            ping = new HudWidget(false, 2, 0, 0), timer = new HudWidget(true, 0, 0, 34),
+            reach = new HudWidget(false, 3, 0, -30), combo = new HudWidget(false, 3, 0, 0);
+    public boolean armorVertical = true, armorHands = false;
+    public int armorDur = 1;                 // 0 none, 1 bar, 2 number, 3 percent
+    public boolean keysMouse = true, keysSpace = true, keysCps = true;
+    public boolean pingColorize = true;
+    public int timerMode = 0;                // 0 since game launch, 1 since joining this world/server
+    public int reachDecimals = 2;            // 1..3
+    public int comboSeconds = 3;             // 1..10
     // surge
     public String surgeProfile = "BALANCED";
     public boolean surgeAdaptive = true;
@@ -45,7 +56,13 @@ public final class Settings {
 
     private static int cl(int v, int lo, int hi) { return Math.max(lo, Math.min(hi, v)); }
 
+    public HudWidget[] widgets() { return new HudWidget[]{armor, keys, ping, timer, reach, combo}; }
+    public static final String[] WIDGET_NAMES = {"armor", "keys", "ping", "timer", "reach", "combo"};
+
     public void clamp() {
+        for (HudWidget w : widgets()) w.clamp();
+        armorDur = cl(armorDur, 0, 3); timerMode = cl(timerMode, 0, 1);
+        reachDecimals = cl(reachDecimals, 1, 3); comboSeconds = cl(comboSeconds, 1, 10);
         intensity = Math.max(0, Math.min(2, intensity));
         wordsPerLine = Math.max(1, Math.min(8, wordsPerLine));
         staySeconds = Math.max(1f, Math.min(10f, staySeconds));
@@ -104,6 +121,15 @@ public final class Settings {
                 s.colour2 = (int) (long) Json.num(m.get("colour2"), s.colour2);
                 s.redirectPort = (int) Json.num(m.get("redirectPort"), s.redirectPort);
                 s.source = (int) Json.num(m.get("source"), s.source);
+                Map<String, Object> hud = Json.obj(m.get("hud"));
+                HudWidget[] ws = s.widgets();
+                for (int i = 0; i < ws.length; i++) ws[i].load(Json.obj(hud.get(WIDGET_NAMES[i])));
+                s.armorVertical = Json.bool(m.get("armorVertical"), s.armorVertical); s.armorHands = Json.bool(m.get("armorHands"), s.armorHands);
+                s.armorDur = (int) Json.num(m.get("armorDur"), s.armorDur);
+                s.keysMouse = Json.bool(m.get("keysMouse"), s.keysMouse); s.keysSpace = Json.bool(m.get("keysSpace"), s.keysSpace);
+                s.keysCps = Json.bool(m.get("keysCps"), s.keysCps); s.pingColorize = Json.bool(m.get("pingColorize"), s.pingColorize);
+                s.timerMode = (int) Json.num(m.get("timerMode"), s.timerMode); s.reachDecimals = (int) Json.num(m.get("reachDecimals"), s.reachDecimals);
+                s.comboSeconds = (int) Json.num(m.get("comboSeconds"), s.comboSeconds);
                 s.spotifyClientId = Json.str(m.get("spotifyClientId"), "");
                 s.surgeProfile = Json.str(m.get("surgeProfile"), s.surgeProfile);
                 s.surgeAdaptive = Json.bool(m.get("surgeAdaptive"), s.surgeAdaptive);
@@ -132,6 +158,14 @@ public final class Settings {
         m.put("staySeconds", (double) staySeconds); m.put("sizePercent", sizePercent);
         m.put("syncOffsetMs", syncOffsetMs); m.put("colour", (long) colour & 0xFFFFFFFFL);
         m.put("colour2", (long) colour2 & 0xFFFFFFFFL); m.put("redirectPort", redirectPort); m.put("source", source);
+        Map<String, Object> hud = new LinkedHashMap<>();
+        HudWidget[] ws = widgets();
+        for (int i = 0; i < ws.length; i++) hud.put(WIDGET_NAMES[i], ws[i].toMap());
+        m.put("hud", hud);
+        m.put("armorVertical", armorVertical); m.put("armorHands", armorHands); m.put("armorDur", armorDur);
+        m.put("keysMouse", keysMouse); m.put("keysSpace", keysSpace); m.put("keysCps", keysCps);
+        m.put("pingColorize", pingColorize); m.put("timerMode", timerMode); m.put("reachDecimals", reachDecimals);
+        m.put("comboSeconds", comboSeconds);
         m.put("spotifyClientId", spotifyClientId); m.put("surgeProfile", surgeProfile);
         m.put("surgeAdaptive", surgeAdaptive); m.put("surgeOverlay", surgeOverlay);
         m.put("targetFps", targetFps); m.put("backgroundFps", backgroundFps); m.put("lightenLyrics", lightenLyrics);

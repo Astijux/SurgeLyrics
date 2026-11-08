@@ -15,8 +15,14 @@ final class Glass {
     /** Global opacity for everything drawn this frame (used for the open animation). */
     static float alpha = 1f;
 
+    /** When non-zero, the rim light is tinted toward this colour (used for the main window). */
+    static int rimTint = 0;
+
     static int a(int argb) { return LyricsView.withAlpha(argb, alpha); }
     static int white(float a) { return LyricsView.withAlpha(0xFFFFFFFF, a); }
+    private static int rimCol(float a) {
+        return rimTint == 0 ? white(a) : LyricsView.withAlpha(LyricsView.mix(0xFFFFFFFF, 0xFF000000 | rimTint, 0.38f), a);
+    }
 
     /** Horizontal inset of a rounded rect's corner at row dy. */
     static int inset(int r, int h, int dy) {
@@ -59,12 +65,12 @@ final class Glass {
             int lo = inset(r, h, dy);
             int l = x + lo, rr = x + w - lo;
             float t = dy / (float) (h - 1);
-            int rimL = a(white(rim * (0.90f - 0.70f * t)));
+            int rimL = a(rimCol(rim * (0.90f - 0.70f * t)));
             if (dy == 0 || dy == h - 1) { c.fill(l, y + dy, rr, y + dy + 1, rimL); continue; }
             int io = inset(ri, h - 2, dy - 1);
             int il = Math.max(l, x + 1 + io), ir = Math.min(rr, x + w - 1 - io);
             if (l < il) c.fill(l, y + dy, il, y + dy + 1, rimL);
-            if (ir < rr) c.fill(ir, y + dy, rr, y + dy + 1, a(white(rim * (0.50f - 0.38f * t))));
+            if (ir < rr) c.fill(ir, y + dy, rr, y + dy + 1, a(rimCol(rim * (0.50f - 0.38f * t))));
             if (il < ir) {
                 c.fill(il, y + dy, ir, y + dy + 1, body);
                 if (sheen > 0 && dy < sheenRows) {
@@ -72,6 +78,21 @@ final class Glass {
                     c.fill(il, y + dy, ir, y + dy + 1, a(white(sheen * k * k)));
                 }
             }
+        }
+    }
+
+    /** A slow diagonal light sweep across a rounded surface. phase 0..1 moves it from left to right. */
+    static void sweep(DrawContext c, int x, int y, int w, int h, int r, float phase) {
+        int bandW = 44;
+        float center = phase * (w + 2 * bandW) - bandW;
+        for (int dy = 1; dy < h - 1; dy++) {
+            int in = inset(r, h, dy) + 1;
+            int lo = x + in, hi = x + w - in;
+            int cx = x + Math.round(center + dy * 0.5f);
+            int a0 = Math.max(lo, cx - bandW / 2), a1 = Math.min(hi, cx + bandW / 2);
+            if (a0 < a1) c.fill(a0, y + dy, a1, y + dy + 1, a(white(0.035f)));
+            int b0 = Math.max(lo, cx - 8), b1 = Math.min(hi, cx + 8);
+            if (b0 < b1) c.fill(b0, y + dy, b1, y + dy + 1, a(white(0.045f)));
         }
     }
 

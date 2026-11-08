@@ -19,6 +19,8 @@ final class GlassUi {
     float mx, my, dt;
     boolean down, pressed, released, wasDown;
     String active;
+    /** If set, the next slider draws its track as a gradient through these colours (then clears it). */
+    int[] trackStops;
     private final Map<String, Motion.Spring> springs = new HashMap<>();
 
     void begin(DrawContext c, TextRenderer font, float mx, float my, boolean down, float dt) {
@@ -76,8 +78,20 @@ final class GlassUi {
             v = Math.max(min, Math.min(max, v));
         }
         float t = (v - min) / (max - min);
-        Glass.panel(c, x, y + 6, w, 4, 2, 0x40000000, 0.3f, 0f);
-        Glass.panel(c, x, y + 6, Math.max(4, Math.round((w - 12) * t) + 6), 4, 2, withA(accent, 0xD9), 0.6f, 0f);
+        if (trackStops != null && trackStops.length >= 2) {
+            int[] st = trackStops;
+            trackStops = null;
+            for (int px = 0; px < w; px++) {
+                float u = px / (float) Math.max(1, w - 1) * (st.length - 1);
+                int i0 = Math.min(st.length - 2, (int) u);
+                int col = LyricsView.mix(st[i0], st[i0 + 1], u - i0);
+                int edge = (px < 2 || px >= w - 2) ? 1 : 0;
+                c.fill(x + px, y + 6 + edge, x + px + 1, y + 10 - edge, Glass.a(col));
+            }
+        } else {
+            Glass.panel(c, x, y + 6, w, 4, 2, 0x40000000, 0.3f, 0f);
+            Glass.panel(c, x, y + 6, Math.max(4, Math.round((w - 12) * t) + 6), 4, 2, withA(accent, 0xD9), 0.6f, 0f);
+        }
         int kx = x + Math.round((w - 12) * t);
         Glass.panel(c, kx, y + 2, 12, 12, 6, 0xF2FFFFFF, (hov || dragging) ? 1f : 0.6f, 0.28f);
         return v;
