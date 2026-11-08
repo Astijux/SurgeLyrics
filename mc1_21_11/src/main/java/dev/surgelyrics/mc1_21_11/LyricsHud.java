@@ -12,9 +12,9 @@ import java.util.List;
 
 /** HUD: now-playing glass bar, Surge overlay, and the lyric block (modes, fonts, 3D, colour, placement). */
 public final class LyricsHud implements HudElement {
-    static volatile int lastFps;
-    private long fpsWindowStart = System.nanoTime();
-    private int frames, fps;
+    static volatile int lastFps, lastLow;
+    static boolean previewMode;                 // settings preview ignores the Surge lighten rule
+    private int fps, low;
 
     @Override
     public void render(DrawContext ctx, RenderTickCounter tickCounter) {
@@ -27,10 +27,14 @@ public final class LyricsHud implements HudElement {
         Glass.alpha = 1f;
 
         if (s.surgeOverlay) {
-            String t = "Surge " + Runtime.SURGE.profile().label + "  " + fps + " fps"
-                    + (Runtime.SURGE.scale() < 1.0 ? "  (eased " + Math.round(Runtime.SURGE.scale() * 100) + "%)" : "");
-            Glass.panel(ctx, 2, 2, tr.getWidth(t) + 10, 14, 6, 0x66141A2A, 0.6f, 0.1f);
-            Glass.text(ctx, tr, t, 7, 5, 0xFFF2F5FA);
+            String t1 = "Surge " + Runtime.SURGE.profile().label + "   " + fps + " fps   low " + low
+                    + (Runtime.SURGE.scale() < 1.0 ? "   eased " + Math.round(Runtime.SURGE.scale() * 100) + "%" : "");
+            String t2 = Runtime.SURGE.active() ? Runtime.SURGE.statsLine() : "culling off";
+            int ow = Math.max(tr.getWidth(t1), tr.getWidth(t2)) + 12;
+            Glass.shadow(ctx, 2, 2, ow, 25, 7);
+            Glass.panel(ctx, 2, 2, ow, 25, 7, 0x66141A2A, 0.7f, 0.12f);
+            Glass.text(ctx, tr, t1, 8, 6, 0xFFF2F5FA);
+            Glass.text(ctx, tr, t2, 8, 16, 0xFFA4ADBF);
         }
 
         if (!s.lyricsEnabled) return;
@@ -136,7 +140,8 @@ public final class LyricsHud implements HudElement {
         m.scale(scale, scale);
 
         int c1 = s.colour & 0xFFFFFF;
-        if (s.depthStyle == 1) {                          // 3D: stacked, progressively darker copies = extruded letters
+        boolean light = !previewMode && Runtime.SURGE.lightenUi();   // game is struggling: skip eye-candy
+        if (s.depthStyle == 1 && !light) {                          // 3D: stacked, progressively darker copies = extruded letters
             double ang = Math.toRadians(s.lightAngle);
             float dx = (float) Math.cos(ang), dy = (float) Math.sin(ang);
             for (int k = s.depthAmount; k >= 1; k--) {
@@ -149,7 +154,7 @@ public final class LyricsHud implements HudElement {
             for (int ox = -1; ox <= 1; ox++) for (int oy = -1; oy <= 1; oy++)
                 if (ox != 0 || oy != 0) ctx.drawText(tr, plain, x + ox, y + oy, (a << 24) | col, false);
         }
-        if (s.glowStrength > 0) {
+        if (s.glowStrength > 0 && !light) {
             int ga = Math.round(a * 0.22f * s.glowStrength / 50f);
             if (ga >= 4) for (int[] d : GLOW) ctx.drawText(tr, plain, x + d[0], y + d[1], (Math.min(255, ga) << 24) | c1, false);
         }
@@ -162,12 +167,10 @@ public final class LyricsHud implements HudElement {
     // ---------------------------------------------------------------- bar / fps
 
     private void countFrames() {
-        frames++;
-        long now = System.nanoTime();
-        if (now - fpsWindowStart >= 1_000_000_000L) {
-            fps = frames; lastFps = fps; frames = 0; fpsWindowStart = now;
-            Runtime.SURGE.onSecond(fps);
-        }
+        FrameStats.Snapshot sn = Runtime.FRAMES.frame(System.nanoTime());
+        if (sn == null) return;
+        fps = sn.avg(); low = sn.low1(); lastFps = fps; lastLow = low;
+        Runtime.SURGE.onSecond(fps, low);
     }
 
     private void drawBar(DrawContext ctx, TextRenderer font, int sw, int sh, Track t, List<Lrc.Line> lines, Settings s) {

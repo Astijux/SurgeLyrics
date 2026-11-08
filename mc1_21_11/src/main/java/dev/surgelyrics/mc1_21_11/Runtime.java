@@ -13,6 +13,7 @@ public final class Runtime {
 
     public static final Settings SETTINGS = Settings.load(SETTINGS_FILE);
     public static final SurgeGovernor SURGE = new SurgeGovernor();
+    public static final FrameStats FRAMES = new FrameStats();
     public static final LrcLib LYRICS = new LrcLib();
     public static final Spotify SPOTIFY = new Spotify(SETTINGS, TOKEN_FILE);
     public static final WindowsMedia WINDOWS = new WindowsMedia();
@@ -21,7 +22,8 @@ public final class Runtime {
     /** Safe to call any time: pushes current settings into the governor. */
     public static void applySurge() {
         SurgeProfile p = SurgeProfile.byName(SETTINGS.surgeProfile);
-        SURGE.configure(p == null ? SurgeProfile.BALANCED : p, SETTINGS.surgeAdaptive, SETTINGS.targetFps);
+        if (p == null) p = SurgeProfile.BALANCED;
+        SURGE.configure(p, SurgeLimits.of(p, SETTINGS), SETTINGS.surgeAdaptive, SETTINGS.targetFps, SETTINGS.lightenLyrics);
     }
 
     public static void save() { SETTINGS.save(SETTINGS_FILE); }

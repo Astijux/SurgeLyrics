@@ -42,6 +42,17 @@ java -cp core/out dev.surgelyrics.core.CoreTests   # or run CoreTests from your 
 - **Colour:** 12 presets, full hue/saturation/brightness editing for both colours, gradient Off / Static / Flow / Rainbow.
 - **Effects:** flat, 3D extruded (thickness + light angle) or outline text; glow strength; motion; a 3D settings window that leans with the mouse.
 
+## Surge (FPS booster)
+- **Profiles:** Vanilla, Balanced, Aggressive, Potato, Extreme, PvP (long mob sight, cheap everything else) and Custom.
+- **Culling tab:** separate distances for mobs, dropped items, item frames/armor stands, chests/signs, name tags and particles,
+  a particles-per-tick cap, and hide clouds / weather. Moving a slider switches to Custom; "Copy current profile" seeds it.
+- **Never hidden:** you, other players, your pets, your mount, bosses, glowing mobs.
+- **Adaptive easing** watches the average FPS *and* the 1% low (stutter), tightens every range when the game struggles and relaxes when it recovers.
+- **Background FPS cap** while the window isn't focused (default 20).
+- **Lighten lyrics when slow:** glow and 3D text layers are skipped while Surge is easing.
+- **FPS overlay** shows average, 1% low, easing level and what was culled per second.
+- It never edits your video options, so a crash can't leave your settings changed.
+
 ## Audio sources
 Settings (K) -> **Source**: Auto, Windows, or Spotify.
 - **Windows** reads the system media session (the same card as the volume flyout), so Spotify, Apple Music, browsers, VLC and

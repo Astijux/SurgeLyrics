@@ -7,8 +7,13 @@ import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.render.Frustum;
 import net.minecraft.client.render.entity.EntityRenderManager;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.ExperienceOrbEntity;
+import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.boss.WitherEntity;
+import net.minecraft.entity.boss.dragon.EnderDragonEntity;
 import net.minecraft.entity.decoration.AbstractDecorationEntity;
 import net.minecraft.entity.decoration.ArmorStandEntity;
+import net.minecraft.entity.passive.TameableEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -25,12 +30,18 @@ public class EntityRenderManagerMixin {
         if (!g.active()) return;
         MinecraftClient mc = MinecraftClient.getInstance();
         ClientPlayerEntity me = mc.player;
-        // Never hide: you, the camera, other players, your mount/riders, glowing things.
+        // Never hide: you, the camera, other players, glowing things, bosses, your mount/riders and your own pets.
         if (entity == me || entity == mc.getCameraEntity() || entity instanceof PlayerEntity || entity.isGlowing()) return;
-        if (me != null && (entity == me.getVehicle() || entity.hasPassenger(me))) return;
+        if (entity instanceof EnderDragonEntity || entity instanceof WitherEntity) return;
+        if (me != null) {
+            if (entity == me.getVehicle() || entity.hasPassenger(me)) return;
+            if (entity instanceof TameableEntity pet && pet.isOwner(me)) return;
+        }
         double d = entity.squaredDistanceTo(x, y, z);
-        boolean far = (entity instanceof AbstractDecorationEntity || entity instanceof ArmorStandEntity)
-                ? g.cullDecoration(d) : g.cullEntity(d);
+        boolean far;
+        if (entity instanceof ItemEntity || entity instanceof ExperienceOrbEntity) far = g.cullItem(d);
+        else if (entity instanceof AbstractDecorationEntity || entity instanceof ArmorStandEntity) far = g.cullDecoration(d);
+        else far = g.cullMob(d);
         if (far) cir.setReturnValue(false);
     }
 }

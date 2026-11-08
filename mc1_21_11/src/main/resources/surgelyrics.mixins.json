@@ -3,6 +3,7 @@
   "package": "dev.surgelyrics.mc1_21_11.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "MinecraftClientMixin",
     "EntityRenderManagerMixin",
     "EntityRendererMixin",
     "BlockEntityRenderManagerMixin",

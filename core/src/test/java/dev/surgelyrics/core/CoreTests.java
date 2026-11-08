@@ -99,9 +99,11 @@ public final class CoreTests {
 
         // ---- SurgeGovernor
         SurgeGovernor g = new SurgeGovernor();
-        g.configure(SurgeProfile.BALANCED, true, 100);
-        check("near entity kept", !g.cullEntity(30 * 30));
-        check("far entity culled", g.cullEntity(100 * 100));
+        Settings gs = new Settings();
+        g.configure(SurgeProfile.BALANCED, SurgeLimits.of(SurgeProfile.BALANCED, gs), true, 100, true);
+        check("near mob kept", !g.cullMob(30 * 30));
+        check("far mob culled", g.cullMob(100 * 100));
+        check("item range tighter than mob range", g.cullItem(50 * 50) && !g.cullMob(50 * 50));
         for (int i = 0; i < 4; i++) g.onSecond(40);        // sustained slow
         check("adaptive tightens", g.scale() < 1.0);
         double tight = g.scale();
@@ -109,13 +111,62 @@ public final class CoreTests {
         check("adaptive relaxes", g.scale() > tight);
         for (int i = 0; i < 200; i++) g.onSecond(1);
         check("scale floor 0.5", g.scale() >= 0.5);
-        g.configure(SurgeProfile.VANILLA, true, 100);
-        check("vanilla never culls", !g.cullEntity(1e9) && g.particleBudget() == 0 && !g.hideClouds());
-        g.configure(SurgeProfile.POTATO, false, 100);
+        g.configure(SurgeProfile.BALANCED, SurgeLimits.of(SurgeProfile.BALANCED, gs), true, 100, true);
+        for (int i = 0; i < 4; i++) g.onSecond(140, 20);   // fast average but terrible stutter
+        check("1% low stutter also tightens", g.scale() < 1.0);
+        g.configure(SurgeProfile.VANILLA, SurgeLimits.of(SurgeProfile.VANILLA, gs), true, 100, true);
+        check("vanilla never culls", !g.cullMob(1e9) && !g.cullParticle(1e9) && g.particleBudget() == 0 && !g.hideClouds());
+        g.configure(SurgeProfile.POTATO, SurgeLimits.of(SurgeProfile.POTATO, gs), false, 100, true);
         for (int i = 0; i < 50; i++) g.onSecond(1);
         eq("non-adaptive scale fixed", g.scale(), 1.0);
         check("potato hides weather", g.hideWeather());
-        check("profile cycle wraps", SurgeProfile.POTATO.next() == SurgeProfile.VANILLA);
+        check("profile cycle wraps", SurgeProfile.CUSTOM.next() == SurgeProfile.VANILLA);
+
+        // lighten UI + counters
+        g.configure(SurgeProfile.BALANCED, SurgeLimits.of(SurgeProfile.BALANCED, gs), true, 100, true);
+        check("no lighten at full scale", !g.lightenUi());
+        for (int i = 0; i < 14; i++) g.onSecond(10);
+        check("lighten when easing hard", g.lightenUi());
+        g.configure(SurgeProfile.BALANCED, SurgeLimits.of(SurgeProfile.BALANCED, gs), true, 100, false);
+        check("lighten respects the setting", !g.lightenUi());
+        g.configure(SurgeProfile.BALANCED, SurgeLimits.of(SurgeProfile.BALANCED, gs), false, 100, true);
+        g.cullMob(1e6); g.cullMob(1e6); g.cullParticle(1e6); g.cullBlockEntity(1e6); g.cullNametag(1e6);
+        g.onSecond(100);
+        check("stats line counts", g.statsLine().contains("mobs 2") && g.statsLine().contains("particles 1")
+                && g.statsLine().contains("blocks 1") && g.statsLine().contains("names 1"));
+
+        // custom limits
+        Settings cs = new Settings();
+        cs.cMob = 10; cs.cParticleCap = 0; cs.cClouds = true;
+        SurgeLimits cl = SurgeLimits.of(SurgeProfile.CUSTOM, cs);
+        eq("custom mob range", cl.mob(), 10.0);
+        eq("custom clouds", cl.clouds(), true);
+        g.configure(SurgeProfile.CUSTOM, cl, false, 100, true);
+        check("custom culls at 15 blocks", g.cullMob(15 * 15) && !g.cullMob(5 * 5));
+        eq("custom unlimited particles", g.particleBudget(), 0);
+        Settings cp = new Settings();
+        SurgeLimits.copyToCustom(SurgeProfile.EXTREME, cp);
+        eq("copy preset into custom", cp.cMob + "," + cp.cItem + "," + cp.cParticleCap + "," + cp.cWeather, "16,8,60,true");
+        eq("preset ignores custom sliders", SurgeLimits.of(SurgeProfile.POTATO, cs).mob(), 24.0);
+        Settings bs = new Settings();
+        bs.cMob = 9999; bs.cParticleCap = -5; bs.backgroundFps = 2; bs.clamp();
+        eq("custom clamps", bs.cMob + "," + bs.cParticleCap + "," + bs.backgroundFps, "192,0,5");
+        bs.backgroundFps = -1; bs.clamp(); eq("background fps off stays off", bs.backgroundFps, 0);
+        eq("all profiles named", java.util.Arrays.stream(SurgeProfile.values()).map(x -> x.label).distinct().count(), (long) SurgeProfile.values().length);
+
+        // ---- FrameStats
+        FrameStats fs = new FrameStats();
+        FrameStats.Snapshot snap = null;
+        long tns = 1_000_000_000L;
+        for (int i = 0; i < 400 && snap == null; i++) {
+            tns += (i == 50) ? 100_000_000L : 10_000_000L;      // 100 fps with one 100ms hitch
+            snap = fs.frame(tns);
+        }
+        check("framestats snapshot after one second", snap != null);
+        check("framestats average near 100", snap != null && snap.avg() >= 85 && snap.avg() <= 105);
+        check("framestats 1% low catches the hitch", snap != null && snap.low1() <= 12);
+        FrameStats fs2 = new FrameStats();
+        check("framestats quiet before a second", fs2.frame(5_000_000_000L) == null && fs2.frame(5_016_000_000L) == null);
 
         // ---- LyricsView
         List<Lrc.Line> v = Lrc.parse("[00:10.00] a b c d e f g h\n[00:14.00] last line\n[00:40.00] after gap");

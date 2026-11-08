@@ -37,6 +37,13 @@ public final class Settings {
     public boolean surgeAdaptive = true;
     public boolean surgeOverlay = false;
     public int targetFps = 90;         // 30..240
+    public int backgroundFps = 20;     // 0 = off, else 5..60: cap while the window isn't focused
+    public boolean lightenLyrics = true;   // drop glow / 3D layers while Surge is easing
+    // custom culling limits (used when surgeProfile = CUSTOM); distances in blocks, 0 = no limit
+    public int cMob = 64, cItem = 40, cDeco = 40, cBlockEntity = 48, cNametag = 48, cParticleDist = 48, cParticleCap = 600;
+    public boolean cClouds = false, cWeather = false;
+
+    private static int cl(int v, int lo, int hi) { return Math.max(lo, Math.min(hi, v)); }
 
     public void clamp() {
         intensity = Math.max(0, Math.min(2, intensity));
@@ -46,6 +53,9 @@ public final class Settings {
         syncOffsetMs = Math.max(-3000, Math.min(3000, syncOffsetMs));
         targetFps = Math.max(30, Math.min(240, targetFps));
         source = Math.max(0, Math.min(2, source));
+        backgroundFps = backgroundFps <= 0 ? 0 : Math.max(5, Math.min(60, backgroundFps));
+        cMob = cl(cMob, 0, 192); cItem = cl(cItem, 0, 192); cDeco = cl(cDeco, 0, 192); cBlockEntity = cl(cBlockEntity, 0, 192);
+        cNametag = cl(cNametag, 0, 192); cParticleDist = cl(cParticleDist, 0, 192); cParticleCap = cl(cParticleCap, 0, 2000);
         displayMode = Math.max(0, Math.min(4, displayMode));
         font = Math.max(0, Math.min(FontStyle.values().length - 1, font));
         anchor = Math.max(0, Math.min(8, anchor));
@@ -99,6 +109,13 @@ public final class Settings {
                 s.surgeAdaptive = Json.bool(m.get("surgeAdaptive"), s.surgeAdaptive);
                 s.surgeOverlay = Json.bool(m.get("surgeOverlay"), s.surgeOverlay);
                 s.targetFps = (int) Json.num(m.get("targetFps"), s.targetFps);
+                s.backgroundFps = (int) Json.num(m.get("backgroundFps"), s.backgroundFps);
+                s.lightenLyrics = Json.bool(m.get("lightenLyrics"), s.lightenLyrics);
+                s.cMob = (int) Json.num(m.get("cMob"), s.cMob); s.cItem = (int) Json.num(m.get("cItem"), s.cItem);
+                s.cDeco = (int) Json.num(m.get("cDeco"), s.cDeco); s.cBlockEntity = (int) Json.num(m.get("cBlockEntity"), s.cBlockEntity);
+                s.cNametag = (int) Json.num(m.get("cNametag"), s.cNametag); s.cParticleDist = (int) Json.num(m.get("cParticleDist"), s.cParticleDist);
+                s.cParticleCap = (int) Json.num(m.get("cParticleCap"), s.cParticleCap);
+                s.cClouds = Json.bool(m.get("cClouds"), s.cClouds); s.cWeather = Json.bool(m.get("cWeather"), s.cWeather);
             }
         } catch (Exception ignored) {
             // corrupt file: keep defaults; the next save() rewrites it cleanly
@@ -117,7 +134,10 @@ public final class Settings {
         m.put("colour2", (long) colour2 & 0xFFFFFFFFL); m.put("redirectPort", redirectPort); m.put("source", source);
         m.put("spotifyClientId", spotifyClientId); m.put("surgeProfile", surgeProfile);
         m.put("surgeAdaptive", surgeAdaptive); m.put("surgeOverlay", surgeOverlay);
-        m.put("targetFps", targetFps);
+        m.put("targetFps", targetFps); m.put("backgroundFps", backgroundFps); m.put("lightenLyrics", lightenLyrics);
+        m.put("cMob", cMob); m.put("cItem", cItem); m.put("cDeco", cDeco); m.put("cBlockEntity", cBlockEntity);
+        m.put("cNametag", cNametag); m.put("cParticleDist", cParticleDist); m.put("cParticleCap", cParticleCap);
+        m.put("cClouds", cClouds); m.put("cWeather", cWeather);
         m.put("displayMode", displayMode); m.put("font", font); m.put("anchor", anchor); m.put("offX", offX);
         m.put("offY", offY); m.put("barBottom", barBottom); m.put("depthStyle", depthStyle);
         m.put("depthAmount", depthAmount); m.put("lightAngle", lightAngle); m.put("gradientMode", gradientMode);

@@ -12,13 +12,13 @@ import java.net.URI;
 import java.util.List;
 
 /**
- * Liquid-glass settings window. Seven tabs, a font picker that previews each font in itself, a placement
+ * Liquid-glass settings window. Eight tabs, a font picker that previews each font in itself, a placement
  * grid with a mini-screen, full colour control, 3D text options, and an optional floating 3D window that
  * leans with the mouse. Drawn immediate-mode over the game's background blur; the mouse is polled from GLFW.
  */
 public final class SettingsScreen extends Screen {
-    private static final int W = 372, H = 262;
-    private static final String[] TABS = {"Lyrics", "Style", "Layout", "Colour", "Effects", "Surge", "Source"};
+    private static final int W = 380, H = 262;
+    private static final String[] TABS = {"Lyrics", "Style", "Layout", "Colour", "Effects", "Surge", "Culling", "Source"};
     private static final String[] MOTION = {"Calm", "Normal", "Lively"};
     private static final String[] SOURCES = {"Auto", "Windows", "Spotify"};
     private static final String[] DEPTH = {"Flat", "3D", "Outline"};
@@ -216,29 +216,71 @@ public final class SettingsScreen extends Screen {
             }
             case 5 -> {
                 SurgeProfile[] ps = SurgeProfile.values();
-                String[] names = new String[ps.length];
-                int cur = 0;
-                for (int i = 0; i < ps.length; i++) { names[i] = ps[i].label; if (ps[i].name().equals(st.surgeProfile)) cur = i; }
-                ui.label("Profile", lx, y + 3, TEXT);
-                int sel = ui.segmented("prof", cx, y, cw, names, cur, accent);
-                if (sel != cur) { st.surgeProfile = ps[sel].name(); surgeChanged = true; }
-                y += rh;
+                SurgeProfile curP = SurgeProfile.byName(st.surgeProfile);
+                int chipW = (W - 32 - 18) / 4;
+                for (int i = 0; i < ps.length; i++) {
+                    int cxp = lx + (i % 4) * (chipW + 6), cyp = y + (i / 4) * 22;
+                    if (ui.chip("sp" + i, cxp, cyp, chipW, 18, ps[i].label, null, ps[i] == curP, accent)) {
+                        if (ps[i] == SurgeProfile.CUSTOM && curP != SurgeProfile.CUSTOM && curP != null)
+                            SurgeLimits.copyToCustom(curP, st);          // Custom starts from what you were using
+                        st.surgeProfile = ps[i].name();
+                        surgeChanged = true;
+                    }
+                }
+                y += 2 * rh + 6;
                 ui.label("Adaptive easing", lx, y + 3, TEXT);
                 boolean ad = ui.toggle("adapt", tg, y, st.surgeAdaptive, accent);
                 if (ad != st.surgeAdaptive) { st.surgeAdaptive = ad; surgeChanged = true; }
                 y += rh;
-                ui.label("FPS overlay", lx, y + 3, TEXT);
-                st.surgeOverlay = ui.toggle("ovl", tg, y, st.surgeOverlay, accent); y += rh;
-                ui.label("Target FPS", lx, y + 3, TEXT);
+                ui.label("Target FPS", lx, y + 3, st.surgeAdaptive ? TEXT : FAINT);
                 int tf = Math.round(ui.slider("tfps", cx, y, cw - 44, st.targetFps, 30, 240, 10, accent));
                 if (tf != st.targetFps) { st.targetFps = tf; surgeChanged = true; }
-                Glass.textRight(ctx, textRenderer, String.valueOf(st.targetFps), rv, y + 4, DIM); y += rh + 4;
-                SurgeProfile p = Runtime.SURGE.profile();
-                String d = p == SurgeProfile.VANILLA ? "Nothing is culled."
-                        : "Entities past " + (int) (p.entityBlocks * Runtime.SURGE.scale()) + " blocks hidden, particles capped at "
-                        + Runtime.SURGE.particleBudget() + ".";
+                Glass.textRight(ctx, textRenderer, String.valueOf(st.targetFps), rv, y + 4, DIM); y += rh;
+                ui.label("Background FPS", lx, y + 3, TEXT);
+                st.backgroundFps = Math.round(ui.slider("bgfps", cx, y, cw - 44, st.backgroundFps, 0, 60, 5, accent));
+                Glass.textRight(ctx, textRenderer, st.backgroundFps == 0 ? "off" : String.valueOf(st.backgroundFps), rv, y + 4, DIM); y += rh;
+                ui.label("Lighten lyrics when slow", lx, y + 3, TEXT);
+                boolean lt = ui.toggle("lite", tg, y, st.lightenLyrics, accent);
+                if (lt != st.lightenLyrics) { st.lightenLyrics = lt; surgeChanged = true; }
+                y += rh;
+                ui.label("FPS overlay", lx, y + 3, TEXT);
+                st.surgeOverlay = ui.toggle("ovl", tg, y, st.surgeOverlay, accent); y += rh + 2;
+                SurgeLimits lim = Runtime.SURGE.limits();
+                String d = !Runtime.SURGE.active() ? "Nothing is culled."
+                        : "Mobs past " + (int) (lim.mob() * Runtime.SURGE.scale()) + " blocks, items past " + (int) (lim.item() * Runtime.SURGE.scale())
+                        + ", particles capped at " + Runtime.SURGE.particleBudget() + ".";
                 Glass.text(ctx, textRenderer, Glass.fit(textRenderer, d, W - 32), lx, y, DIM);
-                Glass.text(ctx, textRenderer, "Live: " + LyricsHud.lastFps + " fps   ranges at " + Math.round(Runtime.SURGE.scale() * 100) + "%", lx, y + 12, FAINT);
+                Glass.text(ctx, textRenderer, "Live: " + LyricsHud.lastFps + " fps, 1% low " + LyricsHud.lastLow
+                        + "   ranges at " + Math.round(Runtime.SURGE.scale() * 100) + "%", lx, y + 12, FAINT);
+            }
+            case 6 -> {
+                final int r2 = 20;
+                SurgeProfile curP = SurgeProfile.byName(st.surgeProfile);
+                ui.label("Custom limits", lx, y + 3, TEXT);
+                if (ui.button("copyp", W - 154, y, 140, 16, "Copy current profile", accent, false)) {
+                    SurgeLimits.copyToCustom(curP == null ? SurgeProfile.BALANCED : curP, st);
+                    st.surgeProfile = SurgeProfile.CUSTOM.name(); surgeChanged = true;
+                }
+                y += r2;
+                int[] before = {st.cMob, st.cItem, st.cDeco, st.cBlockEntity, st.cNametag, st.cParticleDist, st.cParticleCap};
+                st.cMob = distRow(ctx, "cmob", "Mobs", st.cMob, 0, 192, 4, y, accent, " blocks"); y += r2;
+                st.cItem = distRow(ctx, "citem", "Dropped items", st.cItem, 0, 192, 4, y, accent, " blocks"); y += r2;
+                st.cDeco = distRow(ctx, "cdeco", "Frames and stands", st.cDeco, 0, 192, 4, y, accent, " blocks"); y += r2;
+                st.cBlockEntity = distRow(ctx, "cblk", "Chests and signs", st.cBlockEntity, 0, 192, 4, y, accent, " blocks"); y += r2;
+                st.cNametag = distRow(ctx, "ctag", "Name tags", st.cNametag, 0, 192, 4, y, accent, " blocks"); y += r2;
+                st.cParticleDist = distRow(ctx, "cpd", "Particle distance", st.cParticleDist, 0, 192, 4, y, accent, " blocks"); y += r2;
+                st.cParticleCap = distRow(ctx, "cpc", "Particles per tick", st.cParticleCap, 0, 2000, 20, y, accent, ""); y += r2;
+                boolean moved = before[0] != st.cMob || before[1] != st.cItem || before[2] != st.cDeco || before[3] != st.cBlockEntity
+                        || before[4] != st.cNametag || before[5] != st.cParticleDist || before[6] != st.cParticleCap;
+                ui.label("Hide clouds", lx, y + 3, TEXT);
+                boolean cc = ui.toggle("ccl", lx + 76, y, st.cClouds, accent);
+                ui.label("Hide weather", 196, y + 3, TEXT);
+                boolean cw2 = ui.toggle("cwx", tg, y, st.cWeather, accent);
+                if (cc != st.cClouds || cw2 != st.cWeather) { st.cClouds = cc; st.cWeather = cw2; moved = true; }
+                if (moved) { st.surgeProfile = SurgeProfile.CUSTOM.name(); surgeChanged = true; }
+                y += r2 + 6;
+                Glass.text(ctx, textRenderer, "Active: " + Runtime.SURGE.profile().label + ".  0 = never hide.  Moving a slider switches to Custom.", lx, y, FAINT);
+                Glass.text(ctx, textRenderer, "Never hidden: you, other players, your pets, your mount, bosses, glowing mobs.", lx, y + 11, FAINT);
             }
             default -> {
                 ui.label("Source", lx, y + 3, TEXT);
@@ -273,7 +315,9 @@ public final class SettingsScreen extends Screen {
             LyricsView.View pv = new LyricsView.View(sample, 1f, "and the next line fades in", 0f, "the line before", fillAnim);
             float sc = Math.min(1.2f * st.sizePercent / 100f, 1.35f);
             float cyp = py + (st.displayMode == 4 ? 17 : 14);
+            LyricsHud.previewMode = true;
             LyricsHud.drawBlock(ctx, textRenderer, pv, st, W / 2f, cyp, st.displayMode == 4 ? Math.min(sc, 0.9f) : sc, Glass.alpha, t, W - 56f);
+            LyricsHud.previewMode = false;
         }
 
         m.popMatrix();
@@ -282,6 +326,14 @@ public final class SettingsScreen extends Screen {
         if (sourceChanged) Runtime.NOW.sync();
         if (idField.visible) idField.render(ctx, mouseX, mouseY, delta);
         Glass.alpha = 1f;
+    }
+
+    /** One labelled slider row for the Culling tab. 0 shows as "off" for distances. */
+    private int distRow(DrawContext ctx, String id, String label, int val, int min, int max, int step, int y, int accent, String unit) {
+        ui.label(label, 16, y + 3, TEXT);
+        int v = Math.round(ui.slider(id, 134, y, W - 14 - 134 - 70, val, min, max, step, accent));
+        Glass.textRight(ctx, textRenderer, v == 0 ? (unit.isEmpty() ? "unlimited" : "off") : v + unit, W - 16, y + 4, DIM);
+        return v;
     }
 
     @Override
