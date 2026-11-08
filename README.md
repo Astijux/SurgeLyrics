@@ -34,6 +34,14 @@ java -cp core/out dev.surgelyrics.core.CoreTests   # or run CoreTests from your 
 3. All mixin injectors use `require = 0`, so a wrong method name means that one optimization silently does nothing
    instead of crashing the game. In `latest.log`, search for "surgelyrics" mixin warnings after first launch.
 
+## Look and feel (all in the K menu)
+- **Display modes:** Chunk (a few words at a time), Line, Type (typewriter), Sing (karaoke fill), Scroll (previous / current / next).
+- **Fonts:** Default, Script (cursive), Serif Italic, Elegant, Deco, Modern, Tech, Pixel. The picker shows each font in itself.
+  To add one: drop `name.ttf` + `name.json` into `assets/surgelyrics/font/` and add a line to `FontStyle`.
+- **Layout:** 3x3 anchor grid with a mini-screen, plus horizontal/vertical offsets, and the bar at top or bottom-left.
+- **Colour:** 12 presets, full hue/saturation/brightness editing for both colours, gradient Off / Static / Flow / Rainbow.
+- **Effects:** flat, 3D extruded (thickness + light angle) or outline text; glow strength; motion; a 3D settings window that leans with the mouse.
+
 ## Audio sources
 Settings (K) -> **Source**: Auto, Windows, or Spotify.
 - **Windows** reads the system media session (the same card as the volume flyout), so Spotify, Apple Music, browsers, VLC and

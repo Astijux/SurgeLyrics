@@ -178,6 +178,70 @@ public final class CoreTests {
         ns.source = 2; eq("np spotify only", np.track().id(), "s");
         ns.source = 7; ns.clamp(); eq("source clamped", ns.source, 2);
 
+        // ---- display modes
+        List<Lrc.Line> dm = Lrc.parse("[00:10.00] one two three four five six\n[00:16.00] second line here\n[00:40.00] third");
+        LyricsView.View line = LyricsView.compute(dm, 12000, 1, 4, 3.5f);
+        eq("mode line shows whole line", line.text(), "one two three four five six");
+        LyricsView.View ty = LyricsView.compute(dm, 12000, 2, 4, 3.5f);
+        check("mode typewriter is a prefix", ty.text().length() < 27 && "one two three four five six".startsWith(ty.text()) && !ty.text().isEmpty());
+        LyricsView.View tyEnd = LyricsView.compute(dm, 15900, 2, 4, 3.5f);
+        eq("typewriter finishes before next line", tyEnd.text(), "one two three four five six");
+        LyricsView.View kf = LyricsView.compute(dm, 13000, 3, 4, 3.5f);
+        check("mode karaoke fill grows", kf.fill() > 0.2f && kf.fill() < 0.8f && LyricsView.compute(dm, 15900, 3, 4, 3.5f).fill() > 0.9f);
+        LyricsView.View sc = LyricsView.compute(dm, 17000, 4, 4, 3.5f);
+        eq("mode scroll has before", sc.before(), "one two three four five six");
+        eq("mode scroll has next", sc.next(), "third");
+        eq("mode 0 equals old chunks", LyricsView.compute(dm, 10100, 0, 4, 3.5f).text(), "one two three four");
+        eq("mode before first line", LyricsView.compute(dm, 100, 3, 4, 3.5f).text(), "");
+
+        // ---- Colors
+        for (int hx : new int[]{0xFF7DD3FC, 0xFFFB923C, 0xFF808080, 0xFFFFFFFF, 0xFF000000, 0xFF123456}) {
+            float[] hsb = Colors.toHsb(hx);
+            int back = Colors.fromHsb(hsb[0], hsb[1], hsb[2]);
+            boolean near = Math.abs(((back >> 16) & 255) - ((hx >> 16) & 255)) <= 1 && Math.abs(((back >> 8) & 255) - ((hx >> 8) & 255)) <= 1
+                    && Math.abs((back & 255) - (hx & 255)) <= 1;
+            check("hsb roundtrip " + Integer.toHexString(hx), near);
+        }
+        eq("hsb pure red", Integer.toHexString(Colors.fromHsb(0f, 1f, 1f)), "ffff0000");
+        eq("hsb pure green", Integer.toHexString(Colors.fromHsb(1f / 3f, 1f, 1f)), "ff00ff00");
+        eq("hue wraps", Colors.fromHsb(1.0f, 1f, 1f), Colors.fromHsb(0f, 1f, 1f));
+        eq("gradient off is c1", Colors.gradient(0, 3, 10, 5f, 0xFF112233, 0xFFAABBCC, 4), 0xFF112233);
+        eq("gradient static ends", Colors.gradient(1, 9, 10, 0f, 0xFF000000, 0xFFFFFFFF, 4) & 255, 255);
+        eq("gradient static start", Colors.gradient(1, 0, 10, 0f, 0xFF000000, 0xFFFFFFFF, 4) & 255, 0);
+        check("gradient flow moves with time", Colors.gradient(2, 2, 10, 0f, 0xFF000000, 0xFFFFFFFF, 4) != Colors.gradient(2, 2, 10, 3f, 0xFF000000, 0xFFFFFFFF, 4));
+        check("gradient rainbow varies per char", Colors.gradient(3, 0, 10, 0f, 0, 0, 4) != Colors.gradient(3, 5, 10, 0f, 0, 0, 4));
+        eq("gradient single char no div by zero", Colors.gradient(1, 0, 1, 0f, 0xFF102030, 0xFFFFFFFF, 4), 0xFF102030);
+        eq("darken keeps alpha", Colors.darken(0x80FFFFFF, 0.5f) >>> 24, 0x80);
+        eq("darken halves", Colors.darken(0xFFFFFFFF, 0.5f) & 255, 128);
+        check("palettes unique names", Colors.PALETTES.stream().map(Colors.Palette::name).distinct().count() == Colors.PALETTES.size());
+
+        // ---- Layout
+        int[] tl = Layout.place(0, 0, 0, 400, 240, 100, 20);
+        eq("anchor top-left x", tl[0], 60); eq("anchor top-left y", tl[1], 20);
+        int[] c = Layout.place(4, 0, 0, 400, 240, 100, 20);
+        eq("anchor center", c[0] + "," + c[1], "200,120");
+        int[] br = Layout.place(8, 0, 0, 400, 240, 100, 20);
+        eq("anchor bottom-right", br[0] + "," + br[1], "340,220");
+        int[] off = Layout.place(4, 1000, -1000, 400, 240, 100, 20);
+        eq("offset clamped on screen", off[0] + "," + off[1], "350,10");
+        int[] big = Layout.place(0, 0, 0, 100, 50, 300, 90);
+        eq("box bigger than screen centres", big[0] + "," + big[1], "50,25");
+        eq("bad anchor clamped", Layout.place(99, 0, 0, 400, 240, 100, 20)[0], 340);
+
+        // ---- FontStyle + new settings
+        eq("default font has no id", FontStyle.DEFAULT.fontId(), null);
+        eq("script font id", FontStyle.SCRIPT.fontId(), "surgelyrics:script");
+        eq("font index clamps", FontStyle.of(99), FontStyle.PIXEL);
+        Settings ns2 = new Settings();
+        ns2.displayMode = 9; ns2.font = -3; ns2.anchor = 40; ns2.offX = 9999; ns2.depthAmount = 0; ns2.lightAngle = -90;
+        ns2.glowStrength = 500; ns2.opacity = 0; ns2.gradientMode = 7; ns2.gradientSpeed = 0; ns2.clamp();
+        eq("settings clamp batch", ns2.displayMode + "," + ns2.font + "," + ns2.anchor + "," + ns2.offX + "," + ns2.depthAmount + "," + ns2.lightAngle
+                + "," + ns2.glowStrength + "," + ns2.opacity + "," + ns2.gradientMode + "," + ns2.gradientSpeed, "4,0,8,300,1,270,100,25,3,1");
+        Path nf = dir.resolve("new.json");
+        ns2.font = 1; ns2.depthStyle = 1; ns2.window3d = false; ns2.save(nf);
+        Settings ns3 = Settings.load(nf);
+        eq("new settings roundtrip", ns3.font + "," + ns3.depthStyle + "," + ns3.window3d + "," + ns3.lightAngle, "1,1,false,270");
+
         System.out.println(pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);
     }

@@ -5,7 +5,11 @@ import dev.surgelyrics.core.Motion;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 
+import dev.surgelyrics.core.Colors;
+import net.minecraft.text.Text;
+
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Immediate-mode glass widgets: each call draws the control and returns its (possibly new) value. */
@@ -100,5 +104,33 @@ final class GlassUi {
         Glass.panel(c, x + in, y + in, w - 2 * in, h - 2 * in, h / 2, fill, 0.95f, 0.26f);
         Glass.textCentered(c, font, label, x + w / 2, y + (h - 8) / 2, 0xFFFFFFFF);
         return pressed && hov;
+    }
+
+    /** Pill chip whose label is drawn in its own font (used by the font picker). */
+    boolean chip(String id, int x, int y, int w, int h, String label, String fontId, boolean sel, int accent) {
+        boolean hov = hover(x, y, w, h);
+        float p = sp(id, sel ? 1 : 0).step(dt, sel ? 1 : 0);
+        int fill = LyricsView.mix(0x30FFFFFF, withA(accent, 0x80), LyricsView.clamp01(p));
+        Glass.panel(c, x, y, w, h, h / 2, fill, (hov || sel) ? 0.95f : 0.55f, 0.22f);
+        Text t = FancyText.build(label, fontId, null);
+        int col = Glass.a(sel ? 0xFFFFFFFF : 0xFFD6DCEA);
+        if (((col >>> 24) & 0xFF) >= 8) c.drawText(font, t, x + (w - font.getWidth(t)) / 2, y + (h - 8) / 2, col, true);
+        return pressed && hov;
+    }
+
+    /** Row of two-tone palette dots (primary colour with the secondary as a small dot). @return clicked index or -1 */
+    int palettes(String id, int x, int y, List<Colors.Palette> ps, int c1, int c2) {
+        int d = 14, gap = 4, res = -1;
+        for (int i = 0; i < ps.size(); i++) {
+            Colors.Palette pl = ps.get(i);
+            int cx = x + i * (d + gap);
+            boolean sel = pl.c1() == c1 && pl.c2() == c2, hov = hover(cx - 1, y - 1, d + 2, d + 2);
+            float s = sp(id + i, sel ? 1 : 0).step(dt, sel ? 1 : 0);
+            int g = Math.round(s * 2f);
+            Glass.panel(c, cx - g, y - g, d + 2 * g, d + 2 * g, (d + 2 * g) / 2, pl.c1(), sel ? 1f : (hov ? 0.85f : 0.5f), 0.3f);
+            Glass.rrect(c, cx + d - 6 + g, y + d - 6 + g, 6, 6, 3, pl.c2());
+            if (pressed && hov) res = i;
+        }
+        return res;
     }
 }

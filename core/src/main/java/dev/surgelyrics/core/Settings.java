@@ -9,8 +9,19 @@ public final class Settings {
     // lyrics
     public boolean lyricsEnabled = true;
     public boolean showBar = true;
-    public boolean glow = true;
-    public boolean gradient = true;
+    public int displayMode = 0;        // 0 chunks, 1 full line, 2 typewriter, 3 karaoke fill, 4 scroll
+    public int font = 0;               // index into FontStyle
+    public int anchor = 4;             // 0..8 grid, see Layout
+    public int offX = 0, offY = 30;    // pixels from the anchor (GUI scale)
+    public boolean barBottom = false;
+    public int depthStyle = 0;         // 0 flat, 1 3D extrude, 2 outline
+    public int depthAmount = 4;        // 1..8 layers
+    public int lightAngle = 45;        // 0..359 degrees, direction the 3D extrusion points
+    public int gradientMode = 1;       // 0 off, 1 static, 2 flow, 3 rainbow
+    public int gradientSpeed = 4;      // 1..10
+    public int glowStrength = 50;      // 0..100 (0 = no glow)
+    public int opacity = 100;          // 25..100
+    public boolean window3d = true;    // 3D floating settings window
     public int intensity = 1;          // 0 calm, 1 normal, 2 lively
     public int wordsPerLine = 4;       // 1..8
     public float staySeconds = 3.5f;   // 1..10
@@ -35,6 +46,18 @@ public final class Settings {
         syncOffsetMs = Math.max(-3000, Math.min(3000, syncOffsetMs));
         targetFps = Math.max(30, Math.min(240, targetFps));
         source = Math.max(0, Math.min(2, source));
+        displayMode = Math.max(0, Math.min(4, displayMode));
+        font = Math.max(0, Math.min(FontStyle.values().length - 1, font));
+        anchor = Math.max(0, Math.min(8, anchor));
+        offX = Math.max(-300, Math.min(300, offX));
+        offY = Math.max(-300, Math.min(300, offY));
+        depthStyle = Math.max(0, Math.min(2, depthStyle));
+        depthAmount = Math.max(1, Math.min(8, depthAmount));
+        lightAngle = ((lightAngle % 360) + 360) % 360;
+        gradientMode = Math.max(0, Math.min(3, gradientMode));
+        gradientSpeed = Math.max(1, Math.min(10, gradientSpeed));
+        glowStrength = Math.max(0, Math.min(100, glowStrength));
+        opacity = Math.max(25, Math.min(100, opacity));
         redirectPort = (redirectPort < 1024 || redirectPort > 65535) ? 19542 : redirectPort;
         if (spotifyClientId == null) spotifyClientId = "";
         spotifyClientId = spotifyClientId.strip();
@@ -48,8 +71,20 @@ public final class Settings {
                 Map<String, Object> m = Json.obj(Json.parse(Files.readString(file)));
                 s.lyricsEnabled = Json.bool(m.get("lyricsEnabled"), s.lyricsEnabled);
                 s.showBar = Json.bool(m.get("showBar"), s.showBar);
-                s.glow = Json.bool(m.get("glow"), s.glow);
-                s.gradient = Json.bool(m.get("gradient"), s.gradient);
+                s.displayMode = (int) Json.num(m.get("displayMode"), s.displayMode);
+                s.font = (int) Json.num(m.get("font"), s.font);
+                s.anchor = (int) Json.num(m.get("anchor"), s.anchor);
+                s.offX = (int) Json.num(m.get("offX"), s.offX);
+                s.offY = (int) Json.num(m.get("offY"), s.offY);
+                s.barBottom = Json.bool(m.get("barBottom"), s.barBottom);
+                s.depthStyle = (int) Json.num(m.get("depthStyle"), s.depthStyle);
+                s.depthAmount = (int) Json.num(m.get("depthAmount"), s.depthAmount);
+                s.lightAngle = (int) Json.num(m.get("lightAngle"), s.lightAngle);
+                s.gradientMode = (int) Json.num(m.get("gradientMode"), s.gradientMode);
+                s.gradientSpeed = (int) Json.num(m.get("gradientSpeed"), s.gradientSpeed);
+                s.glowStrength = (int) Json.num(m.get("glowStrength"), s.glowStrength);
+                s.opacity = (int) Json.num(m.get("opacity"), s.opacity);
+                s.window3d = Json.bool(m.get("window3d"), s.window3d);
                 s.intensity = (int) Json.num(m.get("intensity"), s.intensity);
                 s.wordsPerLine = (int) Json.num(m.get("wordsPerLine"), s.wordsPerLine);
                 s.staySeconds = (float) Json.num(m.get("staySeconds"), s.staySeconds);
@@ -76,14 +111,18 @@ public final class Settings {
     public void save(Path file) {
         clamp();
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("lyricsEnabled", lyricsEnabled); m.put("showBar", showBar); m.put("glow", glow);
-        m.put("gradient", gradient); m.put("intensity", intensity); m.put("wordsPerLine", wordsPerLine);
+        m.put("lyricsEnabled", lyricsEnabled); m.put("showBar", showBar); m.put("intensity", intensity); m.put("wordsPerLine", wordsPerLine);
         m.put("staySeconds", (double) staySeconds); m.put("sizePercent", sizePercent);
         m.put("syncOffsetMs", syncOffsetMs); m.put("colour", (long) colour & 0xFFFFFFFFL);
         m.put("colour2", (long) colour2 & 0xFFFFFFFFL); m.put("redirectPort", redirectPort); m.put("source", source);
         m.put("spotifyClientId", spotifyClientId); m.put("surgeProfile", surgeProfile);
         m.put("surgeAdaptive", surgeAdaptive); m.put("surgeOverlay", surgeOverlay);
         m.put("targetFps", targetFps);
+        m.put("displayMode", displayMode); m.put("font", font); m.put("anchor", anchor); m.put("offX", offX);
+        m.put("offY", offY); m.put("barBottom", barBottom); m.put("depthStyle", depthStyle);
+        m.put("depthAmount", depthAmount); m.put("lightAngle", lightAngle); m.put("gradientMode", gradientMode);
+        m.put("gradientSpeed", gradientSpeed); m.put("glowStrength", glowStrength); m.put("opacity", opacity);
+        m.put("window3d", window3d);
         try {
             Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
             Files.createDirectories(file.toAbsolutePath().getParent());

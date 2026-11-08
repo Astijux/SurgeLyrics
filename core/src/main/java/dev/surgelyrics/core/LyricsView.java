@@ -6,8 +6,40 @@ import java.util.List;
 public final class LyricsView {
     private LyricsView() {}
 
-    public record View(String text, float alpha, String next, float progress) {}
-    public static final View EMPTY = new View("", 0f, "", 0f);
+    /** @param before previous line (scroll mode); @param fill 0..1 how much of the line is sung (karaoke mode) */
+    public record View(String text, float alpha, String next, float progress, String before, float fill) {}
+    public static final View EMPTY = new View("", 0f, "", 0f, "", 0f);
+    public static final String[] MODES = {"Chunk", "Line", "Type", "Sing", "Scroll"};
+
+    /** Display modes: 0 chunks, 1 whole line, 2 typewriter, 3 karaoke fill, 4 scrolling stack. */
+    public static View compute(List<Lrc.Line> lines, long posMs, int mode, int wordsPerLine, float staySeconds) {
+        if (mode <= 0) return compute(lines, posMs, wordsPerLine, staySeconds);
+        int idx = Lrc.indexAt(lines, posMs);
+        if (idx < 0) return EMPTY;
+        Lrc.Line cur = lines.get(idx);
+        boolean hasNext = idx + 1 < lines.size();
+        long nextStart = hasNext ? lines.get(idx + 1).timeMs() : Long.MAX_VALUE;
+        long elapsed = Math.max(0, posMs - cur.timeMs());
+        long stay = (long) (staySeconds * 1000);
+        long span = Math.max(600, Math.min(hasNext ? nextStart - cur.timeMs() : stay, 8000));
+        long gap = hasNext ? nextStart - cur.timeMs() : Long.MAX_VALUE;
+        float out = gap > stay ? 1f - clamp01((elapsed - stay) / 400f) : 1f;
+        float a = easeOutCubic(clamp01(elapsed / 250f)) * out;
+        String text = cur.text().strip();
+        float fill = 0f;
+        if (mode == 2) {
+            int n = text.length();
+            int shown = (int) Math.ceil(n * clamp01(elapsed / (span * 0.75f)));
+            text = text.substring(0, Math.max(1, Math.min(n, shown)));
+            a = clamp01(elapsed / 120f) * out;
+        } else if (mode == 3) {
+            fill = clamp01(elapsed / (span * 0.9f));
+        }
+        String next = hasNext ? lines.get(idx + 1).text() : "";
+        String before = idx > 0 ? lines.get(idx - 1).text() : "";
+        float prog = hasNext ? clamp01(elapsed / (float) Math.max(1, nextStart - cur.timeMs())) : 1f;
+        return new View(text, a, next, prog, before, fill);
+    }
 
     public static View compute(List<Lrc.Line> lines, long posMs, int wordsPerLine, float staySeconds) {
         int idx = Lrc.indexAt(lines, posMs);
@@ -38,7 +70,7 @@ public final class LyricsView {
         float a = easeOutCubic(in) * out;
         String next = hasNext ? lines.get(idx + 1).text() : "";
         float prog = hasNext ? clamp01(elapsed / (float) Math.max(1, nextStart - cur.timeMs())) : 1f;
-        return new View(sb.toString(), a, next, prog);
+        return new View(sb.toString(), a, next, prog, idx > 0 ? lines.get(idx - 1).text() : "", 0f);
     }
 
     public static float clamp01(float v) { return v < 0 ? 0 : Math.min(v, 1); }
