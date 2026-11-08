@@ -12,8 +12,8 @@ public final class SurgeGovernor {
     private double scale = 1.0;                      // 0.5 .. 1.0 multiplier on every range
 
     // counters (render thread only) and the last full second, for the overlay
-    private int cEnt, cBlk, cPart, cTag;
-    private int lEnt, lBlk, lPart, lTag;
+    private int cEnt, cBlk, cPart, cTag, cOcc;
+    private int lEnt, lBlk, lPart, lTag, lOcc;
 
     public void configure(SurgeProfile p, SurgeLimits limits, boolean adaptive, int targetFps, boolean lightenUi) {
         this.profile = p; this.limits = limits; this.adaptive = adaptive; this.targetFps = targetFps; this.lighten = lightenUi;
@@ -27,8 +27,8 @@ public final class SurgeGovernor {
 
     /** Call once per second with the measured numbers. */
     public void onSecond(int avgFps, int low1Fps) {
-        lEnt = cEnt; lBlk = cBlk; lPart = cPart; lTag = cTag;
-        cEnt = cBlk = cPart = cTag = 0;
+        lEnt = cEnt; lBlk = cBlk; lPart = cPart; lTag = cTag; lOcc = cOcc;
+        cEnt = cBlk = cPart = cTag = cOcc = 0;
         if (!adaptive || !active() || avgFps <= 0) return;
         boolean bad = avgFps < targetFps * 0.85 || (low1Fps > 0 && low1Fps < targetFps * 0.35);
         boolean good = avgFps > targetFps * 1.15 && low1Fps > targetFps * 0.6;
@@ -53,6 +53,7 @@ public final class SurgeGovernor {
     public boolean cullNametag(double d) { boolean c = cull(d, limits.nametag()); if (c) cTag++; return c; }
     public boolean cullParticle(double d) { boolean c = cull(d, limits.particleDist()); if (c) cPart++; return c; }
     public void countParticleCapped() { cPart++; }
+    public void countOccluded() { cOcc++; }
 
     public boolean hideClouds() { return active() && limits.clouds(); }
     public boolean hideWeather() { return active() && limits.weather(); }
@@ -66,5 +67,5 @@ public final class SurgeGovernor {
     /** True when the game is struggling and optional eye-candy (glow, 3D text layers) should be skipped. */
     public boolean lightenUi() { return lighten && active() && scale < 0.8; }
 
-    public String statsLine() { return "culled/s  mobs " + lEnt + "  blocks " + lBlk + "  particles " + lPart + "  names " + lTag; }
+    public String statsLine() { return "culled/s  mobs " + lEnt + "  blocks " + lBlk + "  particles " + lPart + "  names " + lTag + "  behind walls " + lOcc; }
 }

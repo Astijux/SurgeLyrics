@@ -367,7 +367,114 @@ public final class CoreTests {
         Settings hb = Settings.load(hf);
         eq("hud loads clamp bad values", hb.armor.scale + "," + hb.armor.anchor + "," + hb.armorDur + "," + hb.comboSeconds, "200,0,3,1");
         eq("hud missing widgets keep defaults", hb.keys.on + "," + hb.timer.anchor, "true,0");
-        eq("six widgets", new Settings().widgets().length, 6);
+        eq("seven widgets", new Settings().widgets().length, 7);
+
+        // ---- RoundRects: identical pixels to row-by-row drawing, far fewer rectangles
+        for (int[] sh : new int[][]{{50, 20, 6}, {120, 68, 8}, {420, 260, 18}, {10, 10, 5}, {7, 30, 0}, {30, 3, 9}, {1, 1, 4}}) {
+            int rw = sh[0], rhh = sh[1], rr = sh[2];
+            boolean[][] a = new boolean[rhh][rw], b = new boolean[rhh][rw];
+            int rrc = Math.max(0, Math.min(rr, Math.min(rw, rhh) / 2));
+            for (int dy = 0; dy < rhh; dy++) { int in = RoundRects.inset(rrc, rhh, dy); for (int xx = in; xx < rw - in; xx++) a[dy][xx] = true; }
+            List<int[]> rs = RoundRects.rects(rw, rhh, rr);
+            boolean overlap = false;
+            for (int[] rc : rs) for (int dy = rc[1]; dy < rc[3]; dy++) for (int xx = rc[0]; xx < rc[2]; xx++) { if (b[dy][xx]) overlap = true; b[dy][xx] = true; }
+            boolean same = !overlap;
+            for (int dy = 0; dy < rhh && same; dy++) for (int xx = 0; xx < rw; xx++) if (a[dy][xx] != b[dy][xx]) { same = false; break; }
+            check("roundrect covers same pixels " + rw + "x" + rhh + " r" + rr, same);
+        }
+        check("roundrect merges rows (420x260 r18 uses few rects)", RoundRects.rects(420, 260, 18).size() <= 40);
+        check("roundrect plain rectangle is one rect", RoundRects.rects(100, 40, 0).size() == 1);
+        check("roundrect empty", RoundRects.rects(0, 10, 3).isEmpty());
+
+        // ---- Occlusion: a wall at x == 5
+        Occlusion.Solid wall = (wx, wy, wz) -> wx == 5;
+        check("wall blocks a straight ray", Occlusion.blocked(wall, 0.5, 0.5, 0.5, 10.5, 0.5, 0.5));
+        check("no wall before target", !Occlusion.blocked(wall, 0.5, 0.5, 0.5, 3.5, 0.5, 0.5));
+        check("target voxel itself is ignored", !Occlusion.blocked(wall, 0.5, 0.5, 0.5, 5.5, 0.5, 0.5));
+        check("start voxel is ignored", !Occlusion.blocked((a1, b1, c1) -> a1 == 0, 0.5, 0.5, 0.5, 3.5, 0.5, 0.5));
+        check("diagonal ray through the wall", Occlusion.blocked(wall, 0.5, 0.5, 0.5, 9.5, 4.5, 6.5));
+        check("ray backwards through the wall", Occlusion.blocked(wall, 10.5, 2.5, 0.5, 0.5, 0.5, 3.5));
+        Occlusion.Solid lowWall = (wx, wy, wz) -> wx == 5 && wy <= 2;
+        check("ray over a low wall is clear", !Occlusion.blocked(lowWall, 0.5, 6.5, 0.5, 10.5, 6.5, 0.5));
+        check("ray under the top is blocked by low wall", Occlusion.blocked(lowWall, 0.5, 1.5, 0.5, 10.5, 1.5, 0.5));
+        check("zero length ray", !Occlusion.blocked(wall, 5.2, 5.2, 5.2, 5.4, 5.4, 5.4));
+        check("hidden needs every sample blocked", Occlusion.hidden(wall, 0.5, 0.5, 0.5, new double[]{10.5, 0.5, 0.5, 10.5, 1.5, 0.5, 10.5, 0.5, 2.5}));
+        check("one clear sample means visible", !Occlusion.hidden(lowWall, 0.5, 0.5, 0.5, new double[]{10.5, 0.5, 0.5, 10.5, 6.5, 0.5}));
+        check("no samples means visible", !Occlusion.hidden(wall, 0, 0, 0, new double[0]));
+        check("never hides through open air", !Occlusion.blocked((a2, b2, c2) -> false, 0.5, 0.5, 0.5, 200.5, 90.5, -70.5));
+        int[] visits = {0};
+        Occlusion.blocked((a3, b3, c3) -> { visits[0]++; return false; }, 0.5, 0.5, 0.5, 40.5, 0.5, 0.5);
+        check("traversal visits about one voxel per block", visits[0] >= 38 && visits[0] <= 42);
+
+        // ---- AudioReact
+        AudioReact ar = new AudioReact();
+        for (int i = 0; i < 200; i++) ar.update(0.5f, 0.016f);
+        check("audio level follows input", Math.abs(ar.level() - 0.5f) < 0.02f);
+        check("steady music is not a beat", ar.beat() < 0.05f);
+        for (int i = 0; i < 200; i++) ar.update(0.0f, 0.016f);
+        check("silence decays the level", ar.level() < 0.02f);
+        ar.update(0.9f, 0.016f);
+        check("a spike after quiet is a beat", ar.beat() > 0.9f);
+        for (int i = 0; i < 40; i++) ar.update(0.0f, 0.016f);
+        check("beat fades out", ar.beat() < 0.05f);
+        float lvBefore = ar.level(); ar.update(1f, 0f); ar.update(1f, -1f);
+        eq("zero or negative dt changes nothing", ar.level(), lvBefore);
+        AudioReact ar2 = new AudioReact(); ar2.update(5f, 10f); ar2.update(Float.NaN, 0.016f);
+        check("audio clamps and survives NaN", ar2.level() <= 1.0f && !Float.isNaN(ar2.level()));
+        eq("audio parse number", AudioLevel.parse(" 0.250 "), 0.25f);
+        eq("audio parse clamps", AudioLevel.parse("7.5"), 1.0f);
+        eq("audio parse garbage", AudioLevel.parse("err"), null);
+        eq("audio parse null", AudioLevel.parse(null), null);
+        eq("audio parse NaN", AudioLevel.parse("NaN"), null);
+
+        // ---- LyricTransitions
+        for (int st2 = 0; st2 < LyricTransitions.STYLES.length; st2++) {
+            LyricTransitions.Pose in1 = LyricTransitions.in(st2, 1f), out0 = LyricTransitions.out(st2, 0f);
+            boolean inEnd = Math.abs(in1.dy()) < 0.01f && Math.abs(in1.scale() - 1f) < 0.01f && in1.alpha() > 0.99f && in1.reveal() > 0.99f;
+            check("transition " + st2 + " incoming lands on identity", inEnd);
+            check("transition " + st2 + " outgoing starts on identity", Math.abs(out0.dy()) < 0.01f && Math.abs(out0.scale() - 1f) < 0.01f && out0.alpha() > 0.99f);
+            check("transition " + st2 + " outgoing ends invisible", LyricTransitions.out(st2, 1f).alpha() < 0.01f);
+            float prev = -1; boolean mono = true;
+            for (int k = 0; k <= 20; k++) { float al = LyricTransitions.in(st2, k / 20f).alpha(); if (al < prev - 1e-4f) mono = false; prev = al; }
+            check("transition " + st2 + " incoming alpha never decreases", mono);
+            check("transition " + st2 + " clamps progress", LyricTransitions.in(st2, 9f).alpha() > 0.99f && LyricTransitions.in(st2, -3f).alpha() <= 1f);
+        }
+        check("fade starts invisible", LyricTransitions.in(0, 0f).alpha() < 0.01f);
+        check("slide starts below", LyricTransitions.in(1, 0f).dy() > 5f);
+        check("zoom starts smaller", LyricTransitions.in(2, 0f).scale() < 0.9f);
+        check("words starts with nothing revealed", LyricTransitions.in(4, 0f).reveal() < 0.01f);
+        check("zoom overshoots slightly", LyricTransitions.in(2, 0.7f).scale() > 1f);
+        check("bounce drops from above", LyricTransitions.in(3, 0f).dy() < -10f);
+
+        // ---- LyricsView hold/key
+        List<Lrc.Line> kv = Lrc.parse("[00:10.00] a b c d e f g h\n[00:14.00] last\n[00:40.00] after gap");
+        check("key stable inside a chunk", LyricsView.compute(kv, 10100, 0, 4, 3.5f).key() == LyricsView.compute(kv, 10300, 0, 4, 3.5f).key());
+        check("key changes between chunks", LyricsView.compute(kv, 10100, 0, 4, 3.5f).key() != LyricsView.compute(kv, 12500, 0, 4, 3.5f).key());
+        check("key changes between lines", LyricsView.compute(kv, 11000, 1, 4, 3.5f).key() != LyricsView.compute(kv, 14500, 1, 4, 3.5f).key());
+        eq("key stable while typing", LyricsView.compute(kv, 10300, 2, 4, 3.5f).key(), LyricsView.compute(kv, 12000, 2, 4, 3.5f).key());
+        check("hold is 1 during a line", LyricsView.compute(kv, 10200, 1, 4, 3.5f).hold() > 0.99f);
+        check("hold fades in a long gap", LyricsView.compute(kv, 14000 + 3900, 1, 4, 3.5f).hold() < 0.1f);
+        check("alpha still fades in at the start", LyricsView.compute(kv, 10000, 1, 4, 3.5f).alpha() < 0.01f && LyricsView.compute(kv, 10000, 1, 4, 3.5f).hold() > 0.99f);
+        eq("empty view key", LyricsView.EMPTY.key(), -1);
+
+        // ---- new settings
+        Settings ms = new Settings();
+        eq("new installs default to Aggressive", ms.surgeProfile, "AGGRESSIVE");
+        ms.hotbar.on = true; ms.hotbarStyle = 2; ms.hotbarNumbers = false; ms.transition = 3; ms.transitionMs = 450;
+        ms.reactive = true; ms.reactStrength = 80; ms.reactBars = false; ms.occludeMobs = false;
+        Path mf = dir.resolve("more.json"); ms.save(mf);
+        Settings ml = Settings.load(mf);
+        eq("hotbar roundtrip", ml.hotbar.on + "," + ml.hotbarStyle + "," + ml.hotbarNumbers, "true,2,false");
+        eq("transition + audio roundtrip", ml.transition + "," + ml.transitionMs + "," + ml.reactive + "," + ml.reactStrength + "," + ml.reactBars, "3,450,true,80,false");
+        eq("occlusion roundtrip", ml.occludeMobs + "," + ml.occludeBlocks, "false,true");
+        ms.transition = 99; ms.transitionMs = 5; ms.hotbarStyle = -4; ms.reactStrength = 900; ms.clamp();
+        eq("new settings clamp", ms.transition + "," + ms.transitionMs + "," + ms.hotbarStyle + "," + ms.reactStrength, "4,150,0,100");
+        eq("hotbar default position bottom centre", new Settings().hotbar.anchor, 7);
+        eq("hotbar off by default", new Settings().hotbar.on, false);
+        SurgeGovernor og = new SurgeGovernor();
+        og.configure(SurgeProfile.BALANCED, SurgeLimits.of(SurgeProfile.BALANCED, new Settings()), false, 100, true);
+        og.countOccluded(); og.countOccluded(); og.onSecond(100);
+        check("stats line counts occluded", og.statsLine().contains("behind walls 2"));
 
         System.out.println(pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);

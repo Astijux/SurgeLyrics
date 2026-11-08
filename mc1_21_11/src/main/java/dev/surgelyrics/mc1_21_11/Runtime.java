@@ -15,6 +15,8 @@ public final class Runtime {
     public static final SurgeGovernor SURGE = new SurgeGovernor();
     public static final FrameStats FRAMES = new FrameStats();
     public static final CombatState COMBAT = new CombatState();
+    public static final AudioLevel AUDIO = new AudioLevel();
+    public static final AudioReact REACT = new AudioReact();
     public static final long LAUNCH_MS = System.currentTimeMillis();
     public static final LrcLib LYRICS = new LrcLib();
     public static final Spotify SPOTIFY = new Spotify(SETTINGS, TOKEN_FILE);
@@ -27,6 +29,9 @@ public final class Runtime {
         if (p == null) p = SurgeProfile.BALANCED;
         SURGE.configure(p, SurgeLimits.of(p, SETTINGS), SETTINGS.surgeAdaptive, SETTINGS.targetFps, SETTINGS.lightenLyrics);
     }
+
+    /** Run the Windows audio meter only while the audio-reactive option is on. */
+    public static void syncAudio() { AUDIO.sync(SETTINGS.reactive); }
 
     public static void save() { SETTINGS.save(SETTINGS_FILE); }
 }

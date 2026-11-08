@@ -35,7 +35,8 @@ public final class Settings {
     // HUD widgets
     public final HudWidget armor = new HudWidget(true, 5, 0, 0), keys = new HudWidget(true, 6, 6, -52),
             ping = new HudWidget(false, 2, 0, 0), timer = new HudWidget(true, 0, 0, 34),
-            reach = new HudWidget(false, 3, 0, -30), combo = new HudWidget(false, 3, 0, 0);
+            reach = new HudWidget(false, 3, 0, -30), combo = new HudWidget(false, 3, 0, 0),
+            hotbar = new HudWidget(false, 7, 0, 10);
     public boolean armorVertical = true, armorHands = false;
     public int armorDur = 1;                 // 0 none, 1 bar, 2 number, 3 percent
     public boolean keysMouse = true, keysSpace = true, keysCps = true;
@@ -43,8 +44,18 @@ public final class Settings {
     public int timerMode = 0;                // 0 since game launch, 1 since joining this world/server
     public int reachDecimals = 2;            // 1..3
     public int comboSeconds = 3;             // 1..10
+    public int hotbarStyle = 0;              // 0 glass, 1 dark, 2 minimal
+    public boolean hotbarNumbers = true, hotbarOffhand = true, hotbarAnimate = true;
+    // lyric transitions
+    public int transition = 1;               // 0 fade, 1 slide, 2 zoom, 3 bounce, 4 words
+    public int transitionMs = 320;           // 150..800
+    // audio reactive (Windows)
+    public boolean reactive = false, reactLyrics = true, reactBars = true, reactWidgets = true;
+    public int reactStrength = 60;           // 0..100
+    // occlusion culling
+    public boolean occludeMobs = true, occludeBlocks = true;
     // surge
-    public String surgeProfile = "BALANCED";
+    public String surgeProfile = "AGGRESSIVE";
     public boolean surgeAdaptive = true;
     public boolean surgeOverlay = false;
     public int targetFps = 90;         // 30..240
@@ -56,13 +67,15 @@ public final class Settings {
 
     private static int cl(int v, int lo, int hi) { return Math.max(lo, Math.min(hi, v)); }
 
-    public HudWidget[] widgets() { return new HudWidget[]{armor, keys, ping, timer, reach, combo}; }
-    public static final String[] WIDGET_NAMES = {"armor", "keys", "ping", "timer", "reach", "combo"};
+    public HudWidget[] widgets() { return new HudWidget[]{armor, keys, ping, timer, reach, combo, hotbar}; }
+    public static final String[] WIDGET_NAMES = {"armor", "keys", "ping", "timer", "reach", "combo", "hotbar"};
 
     public void clamp() {
         for (HudWidget w : widgets()) w.clamp();
         armorDur = cl(armorDur, 0, 3); timerMode = cl(timerMode, 0, 1);
         reachDecimals = cl(reachDecimals, 1, 3); comboSeconds = cl(comboSeconds, 1, 10);
+        hotbarStyle = cl(hotbarStyle, 0, 2); transition = cl(transition, 0, 4); transitionMs = cl(transitionMs, 150, 800);
+        reactStrength = cl(reactStrength, 0, 100);
         intensity = Math.max(0, Math.min(2, intensity));
         wordsPerLine = Math.max(1, Math.min(8, wordsPerLine));
         staySeconds = Math.max(1f, Math.min(10f, staySeconds));
@@ -130,6 +143,14 @@ public final class Settings {
                 s.keysCps = Json.bool(m.get("keysCps"), s.keysCps); s.pingColorize = Json.bool(m.get("pingColorize"), s.pingColorize);
                 s.timerMode = (int) Json.num(m.get("timerMode"), s.timerMode); s.reachDecimals = (int) Json.num(m.get("reachDecimals"), s.reachDecimals);
                 s.comboSeconds = (int) Json.num(m.get("comboSeconds"), s.comboSeconds);
+                s.hotbarStyle = (int) Json.num(m.get("hotbarStyle"), s.hotbarStyle);
+                s.hotbarNumbers = Json.bool(m.get("hotbarNumbers"), s.hotbarNumbers); s.hotbarOffhand = Json.bool(m.get("hotbarOffhand"), s.hotbarOffhand);
+                s.hotbarAnimate = Json.bool(m.get("hotbarAnimate"), s.hotbarAnimate);
+                s.transition = (int) Json.num(m.get("transition"), s.transition); s.transitionMs = (int) Json.num(m.get("transitionMs"), s.transitionMs);
+                s.reactive = Json.bool(m.get("reactive"), s.reactive); s.reactLyrics = Json.bool(m.get("reactLyrics"), s.reactLyrics);
+                s.reactBars = Json.bool(m.get("reactBars"), s.reactBars); s.reactWidgets = Json.bool(m.get("reactWidgets"), s.reactWidgets);
+                s.reactStrength = (int) Json.num(m.get("reactStrength"), s.reactStrength);
+                s.occludeMobs = Json.bool(m.get("occludeMobs"), s.occludeMobs); s.occludeBlocks = Json.bool(m.get("occludeBlocks"), s.occludeBlocks);
                 s.spotifyClientId = Json.str(m.get("spotifyClientId"), "");
                 s.surgeProfile = Json.str(m.get("surgeProfile"), s.surgeProfile);
                 s.surgeAdaptive = Json.bool(m.get("surgeAdaptive"), s.surgeAdaptive);
@@ -166,6 +187,11 @@ public final class Settings {
         m.put("keysMouse", keysMouse); m.put("keysSpace", keysSpace); m.put("keysCps", keysCps);
         m.put("pingColorize", pingColorize); m.put("timerMode", timerMode); m.put("reachDecimals", reachDecimals);
         m.put("comboSeconds", comboSeconds);
+        m.put("hotbarStyle", hotbarStyle); m.put("hotbarNumbers", hotbarNumbers); m.put("hotbarOffhand", hotbarOffhand);
+        m.put("hotbarAnimate", hotbarAnimate); m.put("transition", transition); m.put("transitionMs", transitionMs);
+        m.put("reactive", reactive); m.put("reactLyrics", reactLyrics); m.put("reactBars", reactBars);
+        m.put("reactWidgets", reactWidgets); m.put("reactStrength", reactStrength);
+        m.put("occludeMobs", occludeMobs); m.put("occludeBlocks", occludeBlocks);
         m.put("spotifyClientId", spotifyClientId); m.put("surgeProfile", surgeProfile);
         m.put("surgeAdaptive", surgeAdaptive); m.put("surgeOverlay", surgeOverlay);
         m.put("targetFps", targetFps); m.put("backgroundFps", backgroundFps); m.put("lightenLyrics", lightenLyrics);

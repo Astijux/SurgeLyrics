@@ -18,16 +18,17 @@ import java.util.function.IntConsumer;
  * with the mouse. Drawn immediate-mode over the game's background blur; the mouse is polled from GLFW.
  */
 public final class SettingsScreen extends Screen {
-    private static final int W = 420, H = 262;
-    private static final String[] TABS = {"Lyrics", "Style", "Layout", "Colour", "Effects", "HUD", "Surge", "Culling", "Source"};
+    private static final int W = 460, H = 262;
+    private static final String[] TABS = {"Lyrics", "Style", "Layout", "Colour", "Effects", "HUD", "Audio", "Surge", "Culling", "Source"};
     private static final String[] MOTION = {"Calm", "Normal", "Lively"};
     private static final String[] SOURCES = {"Auto", "Windows", "Spotify"};
     private static final String[] DEPTH = {"Flat", "3D", "Outline"};
     private static final String[] BAR = {"Top", "Bottom left"};
     private static final String[] EDIT = {"Primary", "Secondary"};
-    private static final String[] WIDGETS = {"Armor", "Keys", "Ping", "Timer", "Reach", "Combo"};
+    private static final String[] WIDGETS = {"Armor", "Keys", "Ping", "Timer", "Reach", "Combo", "Hotbar"};
     private static final String[] ARMOR_LAYOUT = {"Vertical", "Horizontal"};
     private static final String[] DURABILITY = {"None", "Bar", "Number", "Percent"};
+    private static final String[] HB_STYLE = {"Glass", "Dark", "Minimal"};
     private static final String[] TIMER_MODE = {"Game launch", "World join"};
     private static final int[] QUICK = {0xFF7DD3FC, 0xFFC084FC, 0xFFF9A8D4, 0xFFFDE68A, 0xFF86EFAC, 0xFFFDA4AF, 0xFF5EEAD4, 0xFFFFFFFF};
     private static final int[] HUE_STOPS = {0xFFFF0000, 0xFFFFFF00, 0xFF00FF00, 0xFF00FFFF, 0xFF0000FF, 0xFFFF00FF, 0xFFFF0000};
@@ -44,6 +45,9 @@ public final class SettingsScreen extends Screen {
     private String hexKey = "";
     private IntConsumer hexTarget;
     private float curOx, curOy, curS = 1f;
+    private int pvIdx;
+    private String pvPrev = "";
+    private long pvStart = System.nanoTime();
 
     public SettingsScreen(Screen parent) { super(Text.literal("Surge Lyrics")); this.parent = parent; }
 
@@ -101,6 +105,7 @@ public final class SettingsScreen extends Screen {
         float dt = Math.min(0.05f, (now - lastNanos) / 1e9f);
         lastNanos = now;
         Settings st = Runtime.SETTINGS;
+        Glass.fast = false;
 
         float o = open.step(dt, closing ? 0f : 1f);
         Glass.alpha = LyricsView.clamp01(o);
@@ -145,7 +150,7 @@ public final class SettingsScreen extends Screen {
         lastTab = ui.segmented("tabs", 14, 30, W - 28, TABS, lastTab, accent);
         Glass.rrect(ctx, 16, 52, W - 32, 1, 0, 0x1EFFFFFF);
 
-        boolean surgeChanged = false, sourceChanged = false;
+        boolean surgeChanged = false, sourceChanged = false, audioChanged = false;
         idField.visible = false;
         hexField.visible = false;
         final int lx = 16, cx = 134, cw = W - 14 - cx, rv = W - 16, rh = 22, tg = W - 44;
@@ -205,7 +210,11 @@ public final class SettingsScreen extends Screen {
                 int by = y + 68 + 14;
                 ui.label("Now-playing bar", lx, by + 3, TEXT);
                 st.barBottom = ui.segmented("barpos", cx + 20, by, 190, BAR, st.barBottom ? 1 : 0, accent) == 1;
-                Glass.text(ctx, textRenderer, "Click a cell to move the lyrics, then nudge with the sliders.", lx, by + 28, FAINT);
+                Glass.text(ctx, textRenderer, "Click a cell to move the lyrics, then nudge with the sliders.", lx, by + 22, FAINT);
+                ui.label("Bob motion", lx, by + 44 + 3, TEXT);
+                st.intensity = ui.segmented("motion", cx, by + 44, cw, MOTION, st.intensity, accent);
+                ui.label("3D settings window", lx, by + 66 + 3, TEXT);
+                st.window3d = ui.toggle("w3d", tg, by + 66, st.window3d, accent);
             }
             case 3 -> {
                 List<Colors.Palette> ps = Colors.PALETTES;
@@ -257,19 +266,20 @@ public final class SettingsScreen extends Screen {
                 ui.label("Glow", lx, y + 3, TEXT);
                 st.glowStrength = Math.round(ui.slider("glow", cx, y, cw - 44, st.glowStrength, 0, 100, 5, accent));
                 Glass.textRight(ctx, textRenderer, st.glowStrength == 0 ? "off" : st.glowStrength + "%", rv, y + 4, DIM); y += rh;
-                ui.label("Motion", lx, y + 3, TEXT);
-                st.intensity = ui.segmented("motion", cx, y, cw, MOTION, st.intensity, accent); y += rh;
-                ui.label("3D settings window", lx, y + 3, TEXT);
-                st.window3d = ui.toggle("w3d", tg, y, st.window3d, accent);
+                ui.label("Transition", lx, y + 3, TEXT);
+                st.transition = ui.segmented("trans", cx, y, cw, LyricTransitions.STYLES, st.transition, accent); y += rh;
+                ui.label("Duration", lx, y + 3, TEXT);
+                st.transitionMs = Math.round(ui.slider("tms", cx, y, cw - 44, st.transitionMs, 150, 800, 10, accent));
+                Glass.textRight(ctx, textRenderer, st.transitionMs + " ms", rv, y + 4, DIM);
             }
             case 5 -> {
                 HudWidget[] ws = st.widgets();
-                int chipW = (W - 32 - 5 * 5) / 6;
+                int chipW = (W - 32 - 6 * 5) / 7;
                 for (int i = 0; i < ws.length; i++)
                     if (ui.chip("hw" + i, lx + i * (chipW + 5), y, chipW, 18, WIDGETS[i], null, hudSel == i, accent)) hudSel = i;
                 final HudWidget cfg = ws[hudSel];
                 y += 26;
-                int[] vs = switch (hudSel) { case 0 -> new int[]{60, 80}; case 1 -> new int[]{68, 70}; default -> new int[]{74, 18}; };
+                int[] vs = switch (hudSel) { case 0 -> new int[]{60, 80}; case 1 -> new int[]{68, 70}; case 6 -> new int[]{190, 28}; default -> new int[]{74, 18}; };
                 cfg.anchor = anchorGrid(ctx, "ha", lx, y, cfg.anchor, cfg.offX, cfg.offY, vs[0], vs[1], accent);
                 int rx = 150, sx = 226, sww = W - 16 - 56 - sx;
                 ui.label("Horizontal", rx, y + 3, TEXT);
@@ -322,6 +332,17 @@ public final class SettingsScreen extends Screen {
                         st.reachDecimals = Math.round(ui.slider("rdec", cx, y, cw - 44, st.reachDecimals, 1, 3, 1, accent));
                         Glass.textRight(ctx, textRenderer, String.valueOf(st.reachDecimals), rv, y + 4, DIM);
                     }
+                    case 6 -> {
+                        ui.label("Style", lx, y + 3, TEXT);
+                        st.hotbarStyle = ui.segmented("hbs", cx, y, 200, HB_STYLE, st.hotbarStyle, accent);
+                        ui.label("Numbers", 346, y + 3, TEXT);
+                        st.hotbarNumbers = ui.toggle("hbn", tg, y, st.hotbarNumbers, accent); y += rh;
+                        ui.label("Offhand", lx, y + 3, TEXT);
+                        st.hotbarOffhand = ui.toggle("hbo", lx + 52, y, st.hotbarOffhand, accent);
+                        ui.label("Glide", 130, y + 3, TEXT);
+                        st.hotbarAnimate = ui.toggle("hba", 130 + 34, y, st.hotbarAnimate, accent);
+                        Glass.text(ctx, textRenderer, "Enable replaces the vanilla hotbar. Colour = highlight.", 220, y + 5, FAINT);
+                    }
                     default -> {
                         ui.label("Resets after", lx, y + 3, TEXT);
                         st.comboSeconds = Math.round(ui.slider("cmbs", cx, y, cw - 44, st.comboSeconds, 1, 10, 1, accent));
@@ -330,6 +351,30 @@ public final class SettingsScreen extends Screen {
                 }
             }
             case 6 -> {
+                ui.label("Audio reactive", lx, y + 3, TEXT);
+                boolean rc = ui.toggle("react", tg, y, st.reactive, accent);
+                if (rc != st.reactive) { st.reactive = rc; audioChanged = true; }
+                y += rh;
+                ui.label("Strength", lx, y + 3, st.reactive ? TEXT : FAINT);
+                st.reactStrength = Math.round(ui.slider("rstr", cx, y, cw - 44, st.reactStrength, 0, 100, 5, accent));
+                Glass.textRight(ctx, textRenderer, st.reactStrength + "%", rv, y + 4, DIM); y += rh;
+                ui.label("Lyrics pulse and glow", lx, y + 3, st.reactive ? TEXT : FAINT);
+                st.reactLyrics = ui.toggle("rly", tg, y, st.reactLyrics, accent); y += rh;
+                ui.label("Visualizer bars (now-playing bar)", lx, y + 3, st.reactive ? TEXT : FAINT);
+                st.reactBars = ui.toggle("rbar", tg, y, st.reactBars, accent); y += rh;
+                ui.label("Widget glass glow", lx, y + 3, st.reactive ? TEXT : FAINT);
+                st.reactWidgets = ui.toggle("rwid", tg, y, st.reactWidgets, accent); y += rh + 6;
+                ui.label("Live level", lx, y + 1, TEXT);
+                float lv = Runtime.REACT.level(), bt = Runtime.REACT.beat();
+                Glass.panel(ctx, cx, y, cw - 30, 10, 5, 0x34000000, 0.4f, 0f);
+                int fw = Math.max(0, Math.round((cw - 34) * LyricsView.clamp01(lv)));
+                if (fw > 1) Glass.rrect(ctx, cx + 2, y + 2, fw, 6, 3, LyricsView.mix(st.colour, st.colour2, lv));
+                Glass.panel(ctx, cx + cw - 20, y, 10, 10, 5, LyricsView.mix(0x30FFFFFF, (0xFF << 24) | (st.colour & 0xFFFFFF), bt), 0.7f, 0.2f);
+                y += rh;
+                Glass.text(ctx, textRenderer, "Meter: " + Runtime.AUDIO.status(), lx, y, FAINT);
+                Glass.text(ctx, textRenderer, "Reacts to your system's output volume, so music from any app drives it. Windows only.", lx, y + 12, FAINT);
+            }
+            case 7 -> {
                 SurgeProfile[] ps = SurgeProfile.values();
                 SurgeProfile curP = SurgeProfile.byName(st.surgeProfile);
                 int chipW = (W - 32 - 18) / 4;
@@ -342,24 +387,31 @@ public final class SettingsScreen extends Screen {
                         surgeChanged = true;
                     }
                 }
-                y += 2 * rh + 6;
+                y += 2 * rh + 2;
+                final int rs = 20;
                 ui.label("Adaptive easing", lx, y + 3, TEXT);
                 boolean ad = ui.toggle("adapt", tg, y, st.surgeAdaptive, accent);
                 if (ad != st.surgeAdaptive) { st.surgeAdaptive = ad; surgeChanged = true; }
-                y += rh;
+                y += rs;
                 ui.label("Target FPS", lx, y + 3, st.surgeAdaptive ? TEXT : FAINT);
                 int tf = Math.round(ui.slider("tfps", cx, y, cw - 44, st.targetFps, 30, 240, 10, accent));
                 if (tf != st.targetFps) { st.targetFps = tf; surgeChanged = true; }
-                Glass.textRight(ctx, textRenderer, String.valueOf(st.targetFps), rv, y + 4, DIM); y += rh;
+                Glass.textRight(ctx, textRenderer, String.valueOf(st.targetFps), rv, y + 4, DIM); y += rs;
                 ui.label("Background FPS", lx, y + 3, TEXT);
                 st.backgroundFps = Math.round(ui.slider("bgfps", cx, y, cw - 44, st.backgroundFps, 0, 60, 5, accent));
-                Glass.textRight(ctx, textRenderer, st.backgroundFps == 0 ? "off" : String.valueOf(st.backgroundFps), rv, y + 4, DIM); y += rh;
+                Glass.textRight(ctx, textRenderer, st.backgroundFps == 0 ? "off" : String.valueOf(st.backgroundFps), rv, y + 4, DIM); y += rs;
                 ui.label("Lighten lyrics when slow", lx, y + 3, TEXT);
                 boolean lt = ui.toggle("lite", tg, y, st.lightenLyrics, accent);
                 if (lt != st.lightenLyrics) { st.lightenLyrics = lt; surgeChanged = true; }
-                y += rh;
+                y += rs;
                 ui.label("FPS overlay", lx, y + 3, TEXT);
-                st.surgeOverlay = ui.toggle("ovl", tg, y, st.surgeOverlay, accent); y += rh + 2;
+                st.surgeOverlay = ui.toggle("ovl", tg, y, st.surgeOverlay, accent); y += rs;
+                ui.label("Hide behind walls", lx, y + 3, TEXT);
+                ui.label("Mobs", 150, y + 3, DIM);
+                st.occludeMobs = ui.toggle("occm", 150 + 32, y, st.occludeMobs, accent);
+                ui.label("Chests and signs", 250, y + 3, DIM);
+                st.occludeBlocks = ui.toggle("occb", tg, y, st.occludeBlocks, accent);
+                y += rs + 2;
                 SurgeLimits lim = Runtime.SURGE.limits();
                 String d = !Runtime.SURGE.active() ? "Nothing is culled."
                         : "Mobs past " + (int) (lim.mob() * Runtime.SURGE.scale()) + " blocks, items past " + (int) (lim.item() * Runtime.SURGE.scale())
@@ -368,7 +420,7 @@ public final class SettingsScreen extends Screen {
                 Glass.text(ctx, textRenderer, "Live: " + LyricsHud.lastFps + " fps, 1% low " + LyricsHud.lastLow
                         + "   ranges at " + Math.round(Runtime.SURGE.scale() * 100) + "%", lx, y + 12, FAINT);
             }
-            case 7 -> {
+            case 8 -> {
                 final int r2 = 20;
                 SurgeProfile curP = SurgeProfile.byName(st.surgeProfile);
                 ui.label("Custom limits", lx, y + 3, TEXT);
@@ -420,19 +472,24 @@ public final class SettingsScreen extends Screen {
             }
         }
 
-        // live preview, in the real renderer, for every tab that changes how lyrics look
+        // live preview, in the real renderer, for every tab that changes how lyrics look; the two sample lines
+        // swap every few seconds so the chosen transition is always visible
         if (lastTab <= 1 || lastTab == 3 || lastTab == 4) {
             int py = H - 46;
             Glass.rrect(ctx, 16, py - 6, W - 32, 1, 0, 0x1EFFFFFF);
             Glass.panel(ctx, 14, py, W - 28, 34, 12, 0x2A000000, 0.5f, 0.12f);
-            String sample = "Glass lyrics look like this";
+            String[] samples = {"Glass lyrics look like this", "and they move like this"};
             float t = LyricsHud.time();
-            float fillAnim = (t % 3f) / 3f;
-            LyricsView.View pv = new LyricsView.View(sample, 1f, "and the next line fades in", 0f, "the line before", fillAnim);
+            int idx = (int) (t / 2.8f) % 2;
+            if (idx != pvIdx) { pvPrev = samples[pvIdx]; pvIdx = idx; pvStart = System.nanoTime(); }
+            float tp = LyricsView.clamp01((System.nanoTime() - pvStart) / (st.transitionMs * 1_000_000f));
+            float fillAnim = (t % 2.8f) / 2.8f;
+            LyricsView.View pv = new LyricsView.View(samples[pvIdx], 1f, "and the next line fades in", 0f, "the line before", fillAnim, 1f, pvIdx);
             float sc = Math.min(1.2f * st.sizePercent / 100f, 1.35f);
             float cyp = py + (st.displayMode == 4 ? 17 : 14);
             LyricsHud.previewMode = true;
-            LyricsHud.drawBlock(ctx, textRenderer, pv, st, W / 2f, cyp, st.displayMode == 4 ? Math.min(sc, 0.9f) : sc, Glass.alpha, t, W - 56f);
+            LyricsHud.drawWithTransition(ctx, textRenderer, pv, st, pvPrev, 1f, tp, W / 2f, cyp,
+                    st.displayMode == 4 ? Math.min(sc, 0.9f) : sc, t, W - 56f, 0f);
             LyricsHud.previewMode = false;
         }
 
@@ -440,6 +497,7 @@ public final class SettingsScreen extends Screen {
 
         if (surgeChanged) Runtime.applySurge();
         if (sourceChanged) Runtime.NOW.sync();
+        if (audioChanged) Runtime.syncAudio();
         if (idField.visible) idField.render(ctx, mouseX, mouseY, delta);
         if (hexField.visible) hexField.render(ctx, mouseX, mouseY, delta);
         Glass.alpha = 1f;

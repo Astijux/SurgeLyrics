@@ -85,7 +85,11 @@ final class HudWidgets {
     private void end(DrawContext ctx) { ctx.getMatrices().popMatrix(); }
 
     private void background(DrawContext ctx, HudWidget c, int w, int h) {
-        if (c.bg) Glass.panel(ctx, 0, 0, w, h, 8, 0x5A141A2A, 0.6f, 0.12f);
+        if (!c.bg) return;
+        Settings s = Runtime.SETTINGS;
+        float pulse = s.reactive && s.reactWidgets ? LyricsHud.pulse(s) : 0f;       // audio reaction tints the glass
+        int fill = pulse > 0.02f ? LyricsView.mix(0x5A141A2A, (0x90 << 24) | (s.colour & 0xFFFFFF), pulse * 0.6f) : 0x5A141A2A;
+        Glass.panel(ctx, 0, 0, w, h, 8, fill, 0.6f + 0.35f * pulse, 0.12f);
     }
 
     // ------------------------------------------------------------------ simple "Label  value" widgets

@@ -2,6 +2,7 @@ package dev.surgelyrics.mc1_21_11.mixin;
 
 import dev.surgelyrics.core.SurgeGovernor;
 import dev.surgelyrics.mc1_21_11.Runtime;
+import dev.surgelyrics.mc1_21_11.OcclusionHelper;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.render.Frustum;
@@ -42,6 +43,10 @@ public class EntityRenderManagerMixin {
         if (entity instanceof ItemEntity || entity instanceof ExperienceOrbEntity) far = g.cullItem(d);
         else if (entity instanceof AbstractDecorationEntity || entity instanceof ArmorStandEntity) far = g.cullDecoration(d);
         else far = g.cullMob(d);
+        if (!far && Runtime.SETTINGS.occludeMobs && OcclusionHelper.entityHidden(entity, x, y, z)) {   // behind solid blocks
+            g.countOccluded();
+            far = true;
+        }
         if (far) cir.setReturnValue(false);
     }
 }

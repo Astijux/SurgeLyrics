@@ -6,9 +6,14 @@ import java.util.List;
 public final class LyricsView {
     private LyricsView() {}
 
-    /** @param before previous line (scroll mode); @param fill 0..1 how much of the line is sung (karaoke mode) */
-    public record View(String text, float alpha, String next, float progress, String before, float fill) {}
-    public static final View EMPTY = new View("", 0f, "", 0f, "", 0f);
+    /**
+     * @param before previous line (scroll mode)
+     * @param fill   0..1 how much of the line is sung (karaoke mode)
+     * @param hold   1 normally, fading to 0 only when a long gap makes the line fade away (no fade-in included)
+     * @param key    identifies the line/chunk on screen; changes exactly when a transition should play
+     */
+    public record View(String text, float alpha, String next, float progress, String before, float fill, float hold, int key) {}
+    public static final View EMPTY = new View("", 0f, "", 0f, "", 0f, 0f, -1);
     public static final String[] MODES = {"Chunk", "Line", "Type", "Sing", "Scroll"};
 
     /** Display modes: 0 chunks, 1 whole line, 2 typewriter, 3 karaoke fill, 4 scrolling stack. */
@@ -38,7 +43,7 @@ public final class LyricsView {
         String next = hasNext ? lines.get(idx + 1).text() : "";
         String before = idx > 0 ? lines.get(idx - 1).text() : "";
         float prog = hasNext ? clamp01(elapsed / (float) Math.max(1, nextStart - cur.timeMs())) : 1f;
-        return new View(text, a, next, prog, before, fill);
+        return new View(text, a, next, prog, before, fill, out, idx * 100);
     }
 
     public static View compute(List<Lrc.Line> lines, long posMs, int wordsPerLine, float staySeconds) {
@@ -70,7 +75,7 @@ public final class LyricsView {
         float a = easeOutCubic(in) * out;
         String next = hasNext ? lines.get(idx + 1).text() : "";
         float prog = hasNext ? clamp01(elapsed / (float) Math.max(1, nextStart - cur.timeMs())) : 1f;
-        return new View(sb.toString(), a, next, prog, idx > 0 ? lines.get(idx - 1).text() : "", 0f);
+        return new View(sb.toString(), a, next, prog, idx > 0 ? lines.get(idx - 1).text() : "", 0f, out, idx * 100 + ci);
     }
 
     public static float clamp01(float v) { return v < 0 ? 0 : Math.min(v, 1); }

@@ -52,11 +52,26 @@ Each has its own position grid, offsets, scale, colour (hex), and optional glass
 - **Culling tab:** separate distances for mobs, dropped items, item frames/armor stands, chests/signs, name tags and particles,
   a particles-per-tick cap, and hide clouds / weather. Moving a slider switches to Custom; "Copy current profile" seeds it.
 - **Never hidden:** you, other players, your pets, your mount, bosses, glowing mobs.
+- **Hide behind walls:** mobs, chests and signs that are completely hidden by solid blocks are not drawn (throttled line-of-sight
+  checks, cached ~0.12 s; anything uncertain, close, large or behind glass/leaves stays visible).
+- **Cheap HUD:** panels are drawn as a handful of merged rectangles and gradient text is cached, so the mod's own HUD costs little.
 - **Adaptive easing** watches the average FPS *and* the 1% low (stutter), tightens every range when the game struggles and relaxes when it recovers.
 - **Background FPS cap** while the window isn't focused (default 20).
 - **Lighten lyrics when slow:** glow and 3D text layers are skipped while Surge is easing.
 - **FPS overlay** shows average, 1% low, easing level and what was culled per second.
 - It never edits your video options, so a crash can't leave your settings changed.
+
+## Audio reactive HUD (Audio tab, optional, Windows)
+Reads your system output level (the volume-mixer peak meter) and drives: lyric scale/glow pulses on beats, five dancing bars in the
+now-playing bar, and a glass glow on the HUD widgets. Strength slider and per-effect toggles. Off by default; the meter only runs while on.
+
+## Lyric transitions (Effects tab)
+Fade, Slide, Zoom, Bounce or Words (word-by-word reveal); the old line animates out as the new one animates in. Duration 150-800 ms.
+The preview strip shows the chosen transition live.
+
+## Custom hotbar (HUD tab -> Hotbar)
+Glass / Dark / Minimal styles, a highlight that glides between slots, the selected item pops up, slot numbers, optional offhand,
+any anchor and offset, scale. Off by default (the vanilla hotbar stays until you enable it).
 
 ## Audio sources
 Settings (K) -> **Source**: Auto, Windows, or Spotify.

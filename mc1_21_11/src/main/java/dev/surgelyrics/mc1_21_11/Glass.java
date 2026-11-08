@@ -1,8 +1,11 @@
 package dev.surgelyrics.mc1_21_11;
 
 import dev.surgelyrics.core.LyricsView;
+import dev.surgelyrics.core.RoundRects;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
+
+import java.util.List;
 
 /**
  * Liquid-glass look drawn with plain rectangles (inspired by quickLiquid's rim light, sheen and pill shapes).
@@ -15,6 +18,9 @@ final class Glass {
     /** Global opacity for everything drawn this frame (used for the open animation). */
     static float alpha = 1f;
 
+    /** HUD mode: a handful of big rectangles per panel instead of one per pixel row (large draw-call saving). */
+    static boolean fast = false;
+
     /** When non-zero, the rim light is tinted toward this colour (used for the main window). */
     static int rimTint = 0;
 
@@ -25,23 +31,13 @@ final class Glass {
     }
 
     /** Horizontal inset of a rounded rect's corner at row dy. */
-    static int inset(int r, int h, int dy) {
-        if (r <= 0 || h <= 0) return 0;
-        int d = Math.min(dy, h - 1 - dy);
-        if (d >= r) return 0;
-        double t = r - d - 0.5;
-        return (int) Math.ceil(r - Math.sqrt(Math.max(0, r * (double) r - t * t)));
-    }
+    static int inset(int r, int h, int dy) { return RoundRects.inset(r, h, dy); }
 
-    /** Solid rounded rect. */
+    /** Solid rounded rect, drawn as merged rectangles (about 2r+1 fills instead of h). */
     static void rrect(DrawContext c, int x, int y, int w, int h, int r, int color) {
         if (w <= 0 || h <= 0) return;
-        r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
         int col = a(color);
-        for (int dy = 0; dy < h; dy++) {
-            int in = inset(r, h, dy);
-            c.fill(x + in, y + dy, x + w - in, y + dy + 1, col);
-        }
+        for (int[] q : RoundRects.rects(w, h, r)) c.fill(x + q[0], y + q[1], x + q[2], y + q[3], col);
     }
 
     /** Soft drop shadow made of a few expanding translucent layers. */
@@ -57,6 +53,7 @@ final class Glass {
      */
     static void panel(DrawContext c, int x, int y, int w, int h, int r, int fill, float rim, float sheen) {
         if (w <= 1 || h <= 1) return;
+        if (fast) { panelFast(c, x, y, w, h, r, fill, rim, sheen); return; }
         r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
         int ri = Math.max(0, r - 1);
         int body = a(fill);
@@ -78,6 +75,29 @@ final class Glass {
                     c.fill(il, y + dy, ir, y + dy + 1, a(white(sheen * k * k)));
                 }
             }
+        }
+    }
+
+    /** Same look with a constant rim and a two-step sheen: roughly 15 fills per panel instead of 2 per row. */
+    private static void panelFast(DrawContext c, int x, int y, int w, int h, int r, int fill, float rim, float sheen) {
+        r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+        int body = a(fill);
+        List<int[]> rs = RoundRects.rects(w, h, r);
+        for (int[] q : rs) c.fill(x + q[0], y + q[1], x + q[2], y + q[3], body);
+        int top = a(rimCol(rim * 0.85f)), side = a(rimCol(rim * 0.45f)), bot = a(rimCol(rim * 0.22f));
+        int in0 = RoundRects.inset(r, h, 0);
+        c.fill(x + in0, y, x + w - in0, y + 1, top);
+        c.fill(x + in0, y + h - 1, x + w - in0, y + h, bot);
+        for (int[] q : rs) {
+            int y1 = Math.max(q[1], 1), y2 = Math.min(q[3], h - 1);
+            if (y1 >= y2) continue;
+            c.fill(x + q[0], y + y1, x + q[0] + 1, y + y2, side);
+            c.fill(x + q[2] - 1, y + y1, x + q[2], y + y2, side);
+        }
+        if (sheen > 0 && h > 6) {
+            int inset = Math.max(2, r / 2 + 1), band = Math.max(2, h / 3);
+            c.fill(x + inset, y + 1, x + w - inset, y + 1 + band, a(white(sheen * 0.45f)));
+            c.fill(x + inset, y + 1, x + w - inset, y + 1 + band / 2, a(white(sheen * 0.45f)));
         }
     }
 
