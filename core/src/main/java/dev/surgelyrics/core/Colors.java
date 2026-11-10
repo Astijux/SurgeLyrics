@@ -16,7 +16,7 @@ public final class Colors {
             new Palette("Candy", 0xFFF9A8D4, 0xFF93C5FD), new Palette("Mono", 0xFFFFFFFF, 0xFF9CA3AF),
             new Palette("Gold", 0xFFFDE68A, 0xFFD97706), new Palette("Toxic", 0xFFA3E635, 0xFF22D3EE));
 
-    public static final String[] GRADIENT_MODES = {"Off", "Static", "Flow", "Rainbow"};
+    public static final String[] GRADIENT_MODES = {"Off", "Static", "Flow", "Rainbow", "Shine", "Pulse", "Sparkle"};
 
     /** @return {hue 0..1, saturation 0..1, brightness 0..1} */
     public static float[] toHsb(int argb) {
@@ -54,6 +54,20 @@ public final class Colors {
                 return LyricsView.mix(c1, c2, t);
             }
             case 3: return fromHsb(pos + time * speed * 0.06f, 0.55f, 1f);
+            case 4: {                                   // a bright band sweeping across the text
+                float sp = (time * speed * 0.22f) % 1.7f - 0.35f;
+                float k = LyricsView.clamp01(1f - Math.abs(pos - sp) / 0.2f);
+                return LyricsView.mix(LyricsView.mix(c1, c2, pos * 0.4f), 0xFFFFFFFF, k * 0.88f);
+            }
+            case 5: {                                   // the whole line breathes between dim and bright
+                float k = 0.5f + 0.5f * (float) Math.sin(time * speed * 0.9f);
+                return LyricsView.mix(darken(c1, 0.5f), LyricsView.mix(c1, c2, pos), k);
+            }
+            case 6: {                                   // static gradient with random letters twinkling white
+                int step = (int) Math.floor(time * speed * 2f);
+                float twinkle = Flair.hash01(i * 7919 + step * 104729) < 0.14f ? 0.9f : 0f;
+                return LyricsView.mix(LyricsView.mix(c1, c2, pos), 0xFFFFFFFF, twinkle);
+            }
             default: return c1;
         }
     }

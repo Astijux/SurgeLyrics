@@ -7,3 +7,4 @@
   Nothing You Could Do, Lora, Italiana, Poiret One, Outfit, Tektur, Silkscreen, Crimson Pro, Libre Baskerville, Gloock,
   Young Serif, Arsenal SC, Erica One, Big Shoulders, Smooch Sans, Boldonse, Bricolage Grotesque, Work Sans, Jura,
   JetBrains Mono, Geist Mono, Pixelify Sans.
+  Plus extra weights/styles of the same families: Instrument Sans, Lora, Crimson Pro, Work Sans, Outfit, Bricolage Grotesque, Jura, Big Shoulders, National Park, DM Mono, IBM Plex Mono, Red Hat Mono, JetBrains Mono.

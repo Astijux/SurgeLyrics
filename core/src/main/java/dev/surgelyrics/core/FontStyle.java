@@ -24,7 +24,21 @@ public enum FontStyle {
     TECHNO("Techno", "techno"),
     MONO("Mono", "mono"),
     CODE("Code", "code"),
-    PIXELSANS("Pixel Sans", "pixelsans");
+    PIXELSANS("Pixel Sans", "pixelsans"),
+    SANSITALIC("Sans Italic", "sansitalic"),
+    BOLDITALIC("Bold Italic", "bolditalic"),
+    CRIMSONBOLD("Crimson Bold", "crimsonbold"),
+    WORKITALIC("Work Italic", "workitalic"),
+    WORKBOLDITALIC("Work Bold Italic", "workbolditalic"),
+    OUTFITBOLD("Outfit Bold", "outfitbold"),
+    BRICOLAGEBOLD("Bricolage Bold", "bricolagebold"),
+    JURALIGHT("Jura Light", "juralight"),
+    SHOULDERS("Shoulders", "shoulders"),
+    NATIONALPARK("National Park", "nationalpark"),
+    DMMONO("DM Mono", "dmmono"),
+    PLEXMONO("Plex Mono", "plexmono"),
+    REDHAT("Red Hat Mono", "redhat"),
+    MONOBOLD("Mono Bold", "monobold");
 
     public final String label;
     public final String key;

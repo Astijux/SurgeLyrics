@@ -282,13 +282,13 @@ public final class CoreTests {
         // ---- FontStyle + new settings
         eq("default font has no id", FontStyle.DEFAULT.fontId(), null);
         eq("script font id", FontStyle.SCRIPT.fontId(), "surgelyrics:script");
-        eq("font index clamps", FontStyle.of(99), FontStyle.PIXELSANS);
+        eq("font index clamps", FontStyle.of(99), FontStyle.MONOBOLD);
         eq("font index clamps low", FontStyle.of(-5), FontStyle.DEFAULT);
         Settings ns2 = new Settings();
         ns2.displayMode = 9; ns2.font = -3; ns2.anchor = 40; ns2.offX = 9999; ns2.depthAmount = 0; ns2.lightAngle = -90;
         ns2.glowStrength = 500; ns2.opacity = 0; ns2.gradientMode = 7; ns2.gradientSpeed = 0; ns2.clamp();
         eq("settings clamp batch", ns2.displayMode + "," + ns2.font + "," + ns2.anchor + "," + ns2.offX + "," + ns2.depthAmount + "," + ns2.lightAngle
-                + "," + ns2.glowStrength + "," + ns2.opacity + "," + ns2.gradientMode + "," + ns2.gradientSpeed, "4,0,8,300,1,270,100,25,3,1");
+                + "," + ns2.glowStrength + "," + ns2.opacity + "," + ns2.gradientMode + "," + ns2.gradientSpeed, "4,0,8,300,1,270,100,25,6,1");
         Path nf = dir.resolve("new.json");
         ns2.font = 1; ns2.depthStyle = 1; ns2.window3d = false; ns2.save(nf);
         Settings ns3 = Settings.load(nf);
@@ -296,7 +296,7 @@ public final class CoreTests {
 
         // ---- fonts
         check("all font keys unique", java.util.Arrays.stream(FontStyle.values()).map(fnt -> fnt.key).distinct().count() == FontStyle.values().length);
-        check("23 fonts, 3 pages", FontStyle.values().length == 23 && FontStyle.pages() == 3);
+        check("37 fonts, 5 pages", FontStyle.values().length == 37 && FontStyle.pages() == 5);
         check("every font key is a legal resource name", java.util.Arrays.stream(FontStyle.values()).filter(fnt -> fnt.key != null).allMatch(fnt -> fnt.key.matches("[a-z0-9_]+")));
 
         // ---- hex colours
@@ -475,6 +475,65 @@ public final class CoreTests {
         og.configure(SurgeProfile.BALANCED, SurgeLimits.of(SurgeProfile.BALANCED, new Settings()), false, 100, true);
         og.countOccluded(); og.countOccluded(); og.onSecond(100);
         check("stats line counts occluded", og.statsLine().contains("behind walls 2"));
+
+        // ---- new gradient modes
+        check("seven gradient modes", Colors.GRADIENT_MODES.length == 7);
+        int shineHits = 0;
+        for (int i = 0; i < 20; i++) if ((Colors.gradient(4, i, 20, 1.0f, 0xFF204080, 0xFF8040C0, 4) & 0xFF) > 0xE0) shineHits++;
+        check("shine lights a band, not the whole line", shineHits >= 1 && shineHits <= 8);
+        int litA = 0, litB = 0;
+        for (int i = 0; i < 20; i++) {
+            if ((Colors.gradient(4, i, 20, 0.5f, 0xFF204080, 0xFF8040C0, 4) & 0xFF) > 0xE0) litA += i;
+            if ((Colors.gradient(4, i, 20, 1.5f, 0xFF204080, 0xFF8040C0, 4) & 0xFF) > 0xE0) litB += i;
+        }
+        check("shine band moves over time", litA != litB && litA < litB);
+        check("pulse breathes over time", Colors.gradient(5, 3, 10, 0.0f, 0xFFFFFFFF, 0xFFFFFFFF, 4) != Colors.gradient(5, 3, 10, 1.7f, 0xFFFFFFFF, 0xFFFFFFFF, 4));
+        eq("pulse is uniform brightness across the line", Colors.gradient(5, 0, 10, 0.5f, 0xFFFFFFFF, 0xFFFFFFFF, 4), Colors.gradient(5, 9, 10, 0.5f, 0xFFFFFFFF, 0xFFFFFFFF, 4));
+        int twinkles = 0;
+        for (int i = 0; i < 400; i++) if ((Colors.gradient(6, i, 400, 0f, 0xFF000000, 0xFF000000, 4) & 0xFF) > 0xC0) twinkles++;
+        check("sparkle twinkles about one letter in seven", twinkles > 30 && twinkles < 90);
+        for (int mode = 0; mode < 7; mode++) {
+            boolean ok = true;
+            for (int i = 0; i < 12; i++) { int gc = Colors.gradient(mode, i, 12, 3.3f, 0xFF7DD3FC, 0xFFC084FC, 5); if ((gc >>> 24) != 0xFF) ok = false; }
+            check("gradient mode " + mode + " stays opaque", ok);
+        }
+
+        // ---- Flair
+        check("hash in range", java.util.stream.IntStream.range(0, 2000).allMatch(k -> { float h = Flair.hash01(k); return h >= 0f && h < 1f; }));
+        eq("hash deterministic", Flair.hash01(12345), Flair.hash01(12345));
+        check("hash spreads out", Flair.hash01(1) != Flair.hash01(2) && Flair.hash01(2) != Flair.hash01(3));
+        boolean glintOk = true;
+        for (int gi = 0; gi < 12; gi++) for (int k = 0; k < 200; k++) {
+            float[] gl = Flair.glint(gi, k * 0.05f);
+            if (gl[0] < -0.5f || gl[0] > 0.5f || gl[1] < -0.6f || gl[1] > 0.6f || gl[2] < 0f || gl[2] > 1f) glintOk = false;
+        }
+        check("glints stay in their box", glintOk);
+        float maxA = 0; for (int k = 0; k < 400; k++) maxA = Math.max(maxA, Flair.glint(3, k * 0.02f)[2]);
+        check("glints reach full brightness and fade", maxA > 0.95f);
+        check("glints move to a new spot each cycle", Flair.glint(2, 0.1f)[0] != Flair.glint(2, 9.1f)[0] || Flair.glint(2, 0.1f)[1] != Flair.glint(2, 9.1f)[1]);
+        check("wave stays within amplitude", java.util.stream.IntStream.range(0, 200).allMatch(k -> Math.abs(Flair.wave(k % 30, k * 0.07f, 3f)) <= 3.0001f));
+        eq("wave amplitude zero is flat", Flair.wave(4, 2f, 0f), 0f);
+        check("wave travels along the letters", Flair.wave(0, 1f, 3f) != Flair.wave(5, 1f, 3f));
+
+        // ---- Themes
+        check("six themes with unique names", Themes.ALL.length == 6 && java.util.Arrays.stream(Themes.ALL).map(Themes.Theme::name).distinct().count() == 6);
+        eq("theme index clamps", Themes.of(99), Themes.ALL[5]);
+        eq("theme index clamps low", Themes.of(-3), Themes.ALL[0]);
+        eq("theme body keeps colour", Themes.body(0, 0x70, 100) & 0xFFFFFF, 0x141A2A);
+        eq("theme opacity scales alpha", Themes.body(0, 200, 50) >>> 24, 100);
+        eq("theme opacity clamps", Themes.body(0, 200, 500) >>> 24, 200);
+
+        // ---- flair settings
+        Settings fl = new Settings();
+        fl.backdrop = 9; fl.reflection = 500; fl.waveAmp = -2; fl.uiTheme = 77; fl.glassOpacity = 3; fl.clamp();
+        eq("flair clamps", fl.backdrop + "," + fl.reflection + "," + fl.waveAmp + "," + fl.uiTheme + "," + fl.glassOpacity, "3,60,0,5,30");
+        fl.backdrop = 2; fl.reflection = 35; fl.waveAmp = 3; fl.sparkles = true; fl.underline = true; fl.edgeGlow = true;
+        fl.uiTheme = 3; fl.glassOpacity = 65; fl.windowGlow = false; fl.windowSweep = false;
+        Path ff = dir.resolve("flair.json"); fl.save(ff);
+        Settings fr = Settings.load(ff);
+        eq("flair roundtrip", fr.backdrop + "," + fr.reflection + "," + fr.waveAmp + "," + fr.sparkles + "," + fr.underline + "," + fr.edgeGlow
+                + "," + fr.uiTheme + "," + fr.glassOpacity + "," + fr.windowGlow + "," + fr.windowSweep, "2,35,3,true,true,true,3,65,false,false");
+        eq("flair defaults are subtle", new Settings().backdrop + "," + new Settings().reflection + "," + new Settings().sparkles, "0,0,false");
 
         System.out.println(pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);

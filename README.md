@@ -36,11 +36,17 @@ java -cp core/out dev.surgelyrics.core.CoreTests   # or run CoreTests from your 
 
 ## Look and feel (all in the K menu)
 - **Display modes:** Chunk (a few words at a time), Line, Type (typewriter), Sing (karaoke fill), Scroll (previous / current / next).
-- **Fonts:** 23 of them (Script cursive, italic and classic serifs, display, heavy, narrow, mono, techno, pixel, ...), paged, each shown in itself.
+- **Fonts:** 37 of them (Script handwriting, italics, classic and display serifs, heavy, narrow, several monos, techno, pixel, bold and light weights ...), paged, each shown in itself. Add your own by dropping `name.ttf` + `name.json` into `assets/surgelyrics/font/` and one line in `FontStyle`.
   To add one: drop `name.ttf` + `name.json` into `assets/surgelyrics/font/` and add a line to `FontStyle`.
 - **Layout:** 3x3 anchor grid with a mini-screen, plus horizontal/vertical offsets, and the bar at top or bottom-left.
-- **Colour:** 12 presets, a hex box (#RRGGBB or #RGB), hue/saturation/brightness sliders with gradient tracks, gradient Off / Static / Flow / Rainbow.
+- **Colour:** 12 presets, a hex box (#RRGGBB or #RGB), hue/saturation/brightness sliders with gradient tracks, gradient Off / Static / Flow / Rainbow / Shine (a bright band sweeps the line) / Pulse (the line breathes) / Sparkle (letters twinkle).
 - **Effects:** flat, 3D extruded (thickness + light angle) or outline text; glow strength; motion; a 3D settings window that leans with the mouse.
+
+## Flair and Theme tabs
+- **Flair:** backdrop card behind the lyrics (glass / dark / bar), reflection under the line, wave letters (each letter rides a wave),
+  twinkling sparkles, a progress underline, and a screen-edge glow on beats (needs Audio reactive).
+- **Theme:** six glass tints (Midnight, Ocean, Plum, Forest, Rose, Slate), glass opacity, drifting colour clouds and a light sweep on the
+  settings window, the 3D window toggle and lyric bob motion. Theme and opacity apply to the HUD panels, widgets and hotbar too.
 
 ## HUD widgets (HUD tab)
 Armor status (icons, durability as bar / number / percent, vertical or horizontal, optional held items), keystrokes (WASD, space,
@@ -83,3 +89,10 @@ Settings (K) -> **Source**: Auto, Windows, or Spotify.
 ## Spotify setup (only needed for the Spotify source)
 Create an app at developer.spotify.com, add Redirect URI `http://127.0.0.1:19542/callback`, paste the Client ID
 in settings (K), click Connect. Tokens are stored in `config/surgelyrics-auth.json`, separate from settings.
+
+## If the game crashes or something misbehaves
+- **Crash shield:** every feature runs inside a guard. If one throws, it switches itself off for that session, the game keeps going,
+  and the reason is written to `config/surgelyrics-errors.log` (the settings window also lists what was switched off).
+- **Crash report:** vanilla launcher `.minecraft/crash-reports/`; Prism/MultiMC: instance -> Minecraft folder -> `crash-reports/` and `logs/latest.log`.
+- **Safe config:** edit `config/surgelyrics.json` with the game closed: set `"surgeProfile": "VANILLA"`, `"occludeMobs": false`,
+  `"occludeBlocks": false`, `"reactive": false`, and `"on": false` inside `hud` -> `hotbar`, then relaunch.

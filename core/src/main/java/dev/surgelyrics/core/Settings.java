@@ -46,6 +46,15 @@ public final class Settings {
     public int comboSeconds = 3;             // 1..10
     public int hotbarStyle = 0;              // 0 glass, 1 dark, 2 minimal
     public boolean hotbarNumbers = true, hotbarOffhand = true, hotbarAnimate = true;
+    // flair
+    public int backdrop = 0;                 // 0 none, 1 glass, 2 dark, 3 bar
+    public int reflection = 0;               // 0..60 percent
+    public int waveAmp = 0;                  // 0..6 pixels (0 = off); letters drawn one by one
+    public boolean sparkles = false, underline = false, edgeGlow = false;
+    // theme
+    public int uiTheme = 0;                  // index into Themes.ALL
+    public int glassOpacity = 100;           // 30..100 percent, scales every glass surface
+    public boolean windowGlow = true, windowSweep = true;
     // lyric transitions
     public int transition = 1;               // 0 fade, 1 slide, 2 zoom, 3 bounce, 4 words
     public int transitionMs = 320;           // 150..800
@@ -74,6 +83,8 @@ public final class Settings {
         for (HudWidget w : widgets()) w.clamp();
         armorDur = cl(armorDur, 0, 3); timerMode = cl(timerMode, 0, 1);
         reachDecimals = cl(reachDecimals, 1, 3); comboSeconds = cl(comboSeconds, 1, 10);
+        backdrop = cl(backdrop, 0, 3); reflection = cl(reflection, 0, 60); waveAmp = cl(waveAmp, 0, 6);
+        uiTheme = cl(uiTheme, 0, Themes.ALL.length - 1); glassOpacity = cl(glassOpacity, 30, 100);
         hotbarStyle = cl(hotbarStyle, 0, 2); transition = cl(transition, 0, 4); transitionMs = cl(transitionMs, 150, 800);
         reactStrength = cl(reactStrength, 0, 100);
         intensity = Math.max(0, Math.min(2, intensity));
@@ -94,7 +105,7 @@ public final class Settings {
         depthStyle = Math.max(0, Math.min(2, depthStyle));
         depthAmount = Math.max(1, Math.min(8, depthAmount));
         lightAngle = ((lightAngle % 360) + 360) % 360;
-        gradientMode = Math.max(0, Math.min(3, gradientMode));
+        gradientMode = Math.max(0, Math.min(Colors.GRADIENT_MODES.length - 1, gradientMode));
         gradientSpeed = Math.max(1, Math.min(10, gradientSpeed));
         glowStrength = Math.max(0, Math.min(100, glowStrength));
         opacity = Math.max(25, Math.min(100, opacity));
@@ -143,6 +154,11 @@ public final class Settings {
                 s.keysCps = Json.bool(m.get("keysCps"), s.keysCps); s.pingColorize = Json.bool(m.get("pingColorize"), s.pingColorize);
                 s.timerMode = (int) Json.num(m.get("timerMode"), s.timerMode); s.reachDecimals = (int) Json.num(m.get("reachDecimals"), s.reachDecimals);
                 s.comboSeconds = (int) Json.num(m.get("comboSeconds"), s.comboSeconds);
+                s.backdrop = (int) Json.num(m.get("backdrop"), s.backdrop); s.reflection = (int) Json.num(m.get("reflection"), s.reflection);
+                s.waveAmp = (int) Json.num(m.get("waveAmp"), s.waveAmp); s.sparkles = Json.bool(m.get("sparkles"), s.sparkles);
+                s.underline = Json.bool(m.get("underline"), s.underline); s.edgeGlow = Json.bool(m.get("edgeGlow"), s.edgeGlow);
+                s.uiTheme = (int) Json.num(m.get("uiTheme"), s.uiTheme); s.glassOpacity = (int) Json.num(m.get("glassOpacity"), s.glassOpacity);
+                s.windowGlow = Json.bool(m.get("windowGlow"), s.windowGlow); s.windowSweep = Json.bool(m.get("windowSweep"), s.windowSweep);
                 s.hotbarStyle = (int) Json.num(m.get("hotbarStyle"), s.hotbarStyle);
                 s.hotbarNumbers = Json.bool(m.get("hotbarNumbers"), s.hotbarNumbers); s.hotbarOffhand = Json.bool(m.get("hotbarOffhand"), s.hotbarOffhand);
                 s.hotbarAnimate = Json.bool(m.get("hotbarAnimate"), s.hotbarAnimate);
@@ -187,6 +203,9 @@ public final class Settings {
         m.put("keysMouse", keysMouse); m.put("keysSpace", keysSpace); m.put("keysCps", keysCps);
         m.put("pingColorize", pingColorize); m.put("timerMode", timerMode); m.put("reachDecimals", reachDecimals);
         m.put("comboSeconds", comboSeconds);
+        m.put("backdrop", backdrop); m.put("reflection", reflection); m.put("waveAmp", waveAmp); m.put("sparkles", sparkles);
+        m.put("underline", underline); m.put("edgeGlow", edgeGlow); m.put("uiTheme", uiTheme); m.put("glassOpacity", glassOpacity);
+        m.put("windowGlow", windowGlow); m.put("windowSweep", windowSweep);
         m.put("hotbarStyle", hotbarStyle); m.put("hotbarNumbers", hotbarNumbers); m.put("hotbarOffhand", hotbarOffhand);
         m.put("hotbarAnimate", hotbarAnimate); m.put("transition", transition); m.put("transitionMs", transitionMs);
         m.put("reactive", reactive); m.put("reactLyrics", reactLyrics); m.put("reactBars", reactBars);
