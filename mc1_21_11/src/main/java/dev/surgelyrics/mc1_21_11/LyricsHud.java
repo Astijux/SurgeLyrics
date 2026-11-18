@@ -16,6 +16,7 @@ public final class LyricsHud implements HudElement {
     static volatile int lastFps, lastLow;
     static boolean previewMode;                 // settings preview ignores the Surge lighten rule
     private final HudWidgets widgets = new HudWidgets();
+    private final PvpWidgets pvp = new PvpWidgets();
     private int fps, low;
 
     // line transition state
@@ -42,28 +43,53 @@ public final class LyricsHud implements HudElement {
         TextRenderer tr = mc.textRenderer;
         int sw = ctx.getScaledWindowWidth(), sh = ctx.getScaledWindowHeight();
         Glass.alpha = 1f;
-        if (s.reactive) Runtime.REACT.update(Runtime.AUDIO.raw(), dt);
+        if (s.reactive) Safe.run("audio-react", () -> Runtime.REACT.update(Runtime.AUDIO.raw(), dt));
 
-        if (s.surgeOverlay) {
+        if (s.reactive && s.edgeGlow) Safe.gui("edge-glow", ctx, () -> {          // screen edges flash on the beat
+            float k = s.reactStrength / 100f;
+            float b = LyricsView.clamp01(k * (Runtime.REACT.beat() + 0.15f * Runtime.REACT.level()));
+            if (b < 0.03f) return;
+            int col = s.colour & 0xFFFFFF;
+            for (int i = 0; i < 6; i++) {
+                int ea = Math.round(255 * 0.16f * b * (1f - i / 6f));
+                if (ea < 2) break;
+                int c = (ea << 24) | col;
+                ctx.fill(0, i * 2, sw, i * 2 + 2, c);
+                ctx.fill(0, sh - i * 2 - 2, sw, sh - i * 2, c);
+                ctx.fill(0, i * 2, i * 2 + 2, sh, c);
+                ctx.fill(sw - i * 2 - 2, i * 2, sw - i * 2, sh, c);
+            }
+        });
+
+        Safe.run("font-check", Fonts::logOnce);
+
+        Safe.gui("overlay", ctx, () -> {
+            if (!s.surgeOverlay) return;
             String t1 = "Surge " + Runtime.SURGE.profile().label + "   " + fps + " fps   low " + low
                     + (Runtime.SURGE.scale() < 1.0 ? "   eased " + Math.round(Runtime.SURGE.scale() * 100) + "%" : "");
             String t2 = Runtime.SURGE.active() ? Runtime.SURGE.statsLine() : "culling off";
             int ow = Math.max(tr.getWidth(t1), tr.getWidth(t2)) + 12;
             Glass.shadow(ctx, 2, 2, ow, 25, 7);
-            Glass.panel(ctx, 2, 2, ow, 25, 7, 0x66141A2A, 0.7f, 0.12f);
+            Glass.panel(ctx, 2, 2, ow, 25, 7, Glass.hudFill(0x66), 0.7f, 0.12f);
             Glass.text(ctx, tr, t1, 8, 6, 0xFFF2F5FA);
             Glass.text(ctx, tr, t2, 8, 16, 0xFFA4ADBF);
-        }
+        });
 
-        widgets.render(ctx, mc, tr, sw, sh);
+        Safe.run("clicks", () -> Clicks.poll(mc, System.currentTimeMillis()));
+        widgets.render(ctx, mc, tr, sw, sh);              // each widget is guarded individually inside
+        pvp.render(ctx, mc, tr, sw, sh);
 
         if (!s.lyricsEnabled) return;
+        Safe.gui("lyrics", ctx, () -> lyrics(ctx, tr, s, sw, sh, nowN));
+    }
+
+    private void lyrics(DrawContext ctx, TextRenderer tr, Settings s, int sw, int sh, long nowN) {
         Track track = Runtime.NOW.track();
         if (track == null) { curText = ""; return; }
         List<Lrc.Line> lines = Runtime.LYRICS.cached(track);
         if (lines == null) Runtime.LYRICS.request(track);          // async, de-duplicated, cached
 
-        if (s.showBar) drawBar(ctx, tr, sw, sh, track, lines, s);
+        if (s.showBar) Safe.gui("bar", ctx, () -> drawBar(ctx, tr, sw, sh, track, lines, s));
         if (lines == null || lines.isEmpty()) { curText = ""; return; }
 
         long pos = track.positionMs() + s.syncOffsetMs;
@@ -108,7 +134,7 @@ public final class LyricsHud implements HudElement {
 
     /** @return {scale after fitting to maxW, block width, block height} in GUI pixels */
     static float[] measure(TextRenderer tr, LyricsView.View v, Settings s, float scale, float maxW) {
-        String fid = FontStyle.of(s.font).fontId();
+        String fid = Fonts.id(s.font);
         float tw = Math.max(1, tr.getWidth(FancyText.build(v.text(), fid, null)));
         if (tw * scale > maxW) scale = maxW / tw;
         float h = 9 * scale;
@@ -122,7 +148,7 @@ public final class LyricsHud implements HudElement {
         LyricTransitions.Pose in = LyricTransitions.in(s.transition, p);
         if (p < 1f && prevText != null && !prevText.isEmpty()) {
             LyricTransitions.Pose out = LyricTransitions.out(s.transition, p);
-            drawStyled(ctx, tr, prevText, cx, cy + out.dy(), scale * out.scale(), prevHold * out.alpha(), s, -1f, time, maxW, 1f, pulse);
+            drawStyled(ctx, tr, prevText, cx, cy + out.dy(), scale * out.scale(), prevHold * out.alpha(), s, -1f, time, maxW, new Fx(1f, pulse, 1f));
         }
         drawBlock(ctx, tr, v, s, cx, cy, scale, v.hold(), time, maxW, in, pulse);
     }
@@ -131,7 +157,8 @@ public final class LyricsHud implements HudElement {
     static void drawBlock(DrawContext ctx, TextRenderer tr, LyricsView.View v, Settings s, float cx, float cy,
                           float scale, float alpha, float time, float maxW, LyricTransitions.Pose pose, float pulse) {
         float fill = s.displayMode == 3 ? v.fill() : -1f;
-        drawStyled(ctx, tr, v.text(), cx, cy + pose.dy(), scale * pose.scale(), alpha * pose.alpha(), s, fill, time, maxW, pose.reveal(), pulse);
+        drawStyled(ctx, tr, v.text(), cx, cy + pose.dy(), scale * pose.scale(), alpha * pose.alpha(), s, fill, time, maxW,
+                new Fx(pose.reveal(), pulse, v.progress()));
         float sc2 = scale * 0.6f, step = 9 * scale * 0.5f + 9 * sc2 * 0.5f + 4;
         int mode = s.displayMode;
         float nAlpha = alpha * LyricsView.clamp01(0.4f + 0.6f * pose.alpha());
@@ -149,7 +176,7 @@ public final class LyricsHud implements HudElement {
         alpha *= s.opacity / 100f;
         int a = Math.round(255 * Math.max(0, Math.min(1, alpha)));
         if (a < 8) return;
-        Text t = FancyText.build(text, FontStyle.of(s.font).fontId(), null);
+        Text t = FancyText.build(text, Fonts.id(s.font), null);
         float tw = Math.max(1, tr.getWidth(t));
         if (tw * scale > maxW) scale = maxW / tw;
         var m = ctx.getMatrices();
@@ -160,20 +187,29 @@ public final class LyricsHud implements HudElement {
         m.popMatrix();
     }
 
+    /** Per-draw extras: how much of the line is revealed, audio pulse, and how far through the line we are. */
+    static final class Fx {
+        final float reveal, pulse, progress;
+        Fx(float reveal, float pulse, float progress) { this.reveal = reveal; this.pulse = pulse; this.progress = progress; }
+    }
+
     /**
-     * The main styled line. fill >= 0 turns on karaoke colouring. reveal < 1 shows only the first words,
-     * left-aligned to the full line so nothing jitters. pulse (0..1) boosts the glow for audio reaction.
+     * The main styled line. fill >= 0 turns on karaoke colouring. fx.reveal < 1 shows only the first words,
+     * left-aligned to the full line so nothing jitters. fx.pulse (0..1) swells the glow for audio reaction.
      */
     static void drawStyled(DrawContext ctx, TextRenderer tr, String text, float cx, float cy, float scale, float alpha,
-                           Settings s, float fill, float time, float maxW, float reveal, float pulse) {
+                           Settings s, float fill, float time, float maxW, Fx fx) {
         alpha *= s.opacity / 100f;
         int a = Math.round(255 * Math.max(0, Math.min(1, alpha)));
+        float reveal = fx.reveal;
         if (a < 8 || text.isEmpty() || reveal <= 0f) return;
 
-        String fid = FontStyle.of(s.font).fontId();
+        String fid = Fonts.id(s.font);
         int n = text.codePointCount(0, text.length());
         boolean flowing = s.gradientMode >= 2;
         float t = flowing ? quant(time) : 0f;
+        boolean light = !previewMode && Runtime.SURGE.lightenUi();   // game is struggling: skip eye-candy
+        boolean wave = s.waveAmp > 0 && !light;
 
         String shown = text;
         int shownCp = n;
@@ -188,9 +224,9 @@ public final class LyricsHud implements HudElement {
 
         Text plainFull = FancyText.build(text, fid, null);
         Text plain = shown.equals(text) ? plainFull : FancyText.build(shown, fid, null);
-        Text main;
         boolean perChar = s.gradientMode != 0 || fill >= 0;
-        if (perChar) {
+        Text main = plain;
+        if (perChar && !wave) {
             final int fn = n, fcp = shownCp;
             final float ft = t, ff = fill;
             String variant = s.gradientMode + "," + s.colour + "," + s.colour2 + "," + s.gradientSpeed + ","
@@ -204,11 +240,24 @@ public final class LyricsHud implements HudElement {
                 }
                 return cols;
             });
-        } else {
-            main = plain;
         }
 
         float twFull = Math.max(1, tr.getWidth(plainFull));
+        // wave mode places letters one by one, so measure that way
+        Text[] letters = null;
+        int[] lw = null;
+        if (wave) {
+            int[] cps = text.codePoints().toArray();
+            letters = new Text[cps.length];
+            lw = new int[cps.length];
+            float sum = 0;
+            for (int i = 0; i < cps.length; i++) {
+                letters[i] = FancyText.build(new String(cps, i, 1), fid, null);
+                lw[i] = tr.getWidth(letters[i]);
+                sum += lw[i];
+            }
+            twFull = Math.max(1, sum);
+        }
         if (twFull * scale > maxW) scale = maxW / twFull;
         int x = -Math.round(twFull / 2f), y = -4;
 
@@ -218,8 +267,19 @@ public final class LyricsHud implements HudElement {
         m.scale(scale, scale);
 
         int c1 = s.colour & 0xFFFFFF;
-        boolean light = !previewMode && Runtime.SURGE.lightenUi();   // game is struggling: skip eye-candy
-        if (s.depthStyle == 1 && !light) {                // 3D: stacked, progressively darker copies = extruded letters
+
+        // -- backdrop card behind the line
+        if (s.backdrop != 0) {
+            int bw = Math.round(twFull) + 16, bx = -bw / 2, by = -7, bh = 19;
+            float saved = Glass.alpha;
+            Glass.alpha = saved * a / 255f;
+            if (s.backdrop == 1) Glass.panel(ctx, bx, by, bw, bh, 9, Glass.hudFill(0x66), 0.7f, 0.12f);
+            else if (s.backdrop == 2) Glass.rrect(ctx, bx, by, bw, bh, 6, Glass.hudFill(0xCC));
+            else { Glass.rrect(ctx, bx, by, bw, bh, 2, Glass.hudFill(0x99)); Glass.rrect(ctx, bx, by, 2, bh, 1, 0xFF000000 | c1); }
+            Glass.alpha = saved;
+        }
+
+        if (s.depthStyle == 1 && !light && !wave) {       // 3D: stacked, progressively darker copies = extruded letters
             double ang = Math.toRadians(s.lightAngle);
             float dx = (float) Math.cos(ang), dy = (float) Math.sin(ang);
             for (int k = s.depthAmount; k >= 1; k--) {
@@ -227,18 +287,67 @@ public final class LyricsHud implements HudElement {
                 ctx.drawText(tr, plain, x + Math.round(dx * k * 0.9f), y + Math.round(dy * k * 0.9f),
                         (Math.round(a * 0.95f) << 24) | col, false);
             }
-        } else if (s.depthStyle == 2) {                   // outline
+        } else if (s.depthStyle == 2 && !wave) {          // outline
             int col = Colors.darken(0xFF000000 | c1, 0.8f) & 0xFFFFFF;
             for (int ox = -1; ox <= 1; ox++) for (int oy = -1; oy <= 1; oy++)
                 if (ox != 0 || oy != 0) ctx.drawText(tr, plain, x + ox, y + oy, (a << 24) | col, false);
         }
         int glow = s.glowStrength;
-        if (pulse > 0.05f) glow = Math.max(glow, 35) + Math.round(pulse * 80f);       // audio reaction swells the glow
-        if (glow > 0 && !light) {
+        if (fx.pulse > 0.05f) glow = Math.max(glow, 35) + Math.round(fx.pulse * 80f);   // audio reaction swells the glow
+        if (glow > 0 && !light && !wave) {
             int ga = Math.round(a * 0.22f * glow / 50f);
             if (ga >= 4) for (int[] d : GLOW) ctx.drawText(tr, plain, x + d[0], y + d[1], (Math.min(255, ga) << 24) | c1, false);
         }
-        ctx.drawText(tr, main, x, y, (a << 24) | (perChar ? 0xFFFFFF : c1), true);
+
+        if (wave) {                                       // letters one by one, riding a travelling wave
+            float cursor = x;
+            for (int i = 0; i < shownCp && i < letters.length; i++) {
+                int col = s.gradientMode == 0 ? c1 : Colors.gradient(s.gradientMode, i, n, t, s.colour, s.colour2, s.gradientSpeed);
+                if (fill >= 0 && i >= fill * n) col = LyricsView.mix(0xFF000000 | col, 0xFF6B7280, 0.72f);
+                ctx.drawText(tr, letters[i], Math.round(cursor), y + Math.round(Flair.wave(i, time, s.waveAmp)),
+                        (a << 24) | (col & 0xFFFFFF), true);
+                cursor += lw[i];
+            }
+        } else {
+            ctx.drawText(tr, main, x, y, (a << 24) | (perChar ? 0xFFFFFF : c1), true);
+        }
+
+        // -- reflection: a dim upside-down copy under the line
+        if (s.reflection > 0 && !light && !wave) {
+            int ra = Math.round(a * s.reflection / 100f * 0.55f);
+            if (ra >= 6) {
+                m.pushMatrix();
+                m.translate(0, s.backdrop != 0 ? 18 : 10);
+                m.scale(1f, -1f);
+                ctx.drawText(tr, main, x, y, (ra << 24) | (perChar ? 0xFFFFFF : c1), false);
+                m.popMatrix();
+            }
+        }
+
+        // -- progress underline
+        if (s.underline) {
+            int uw = Math.round(twFull);
+            float pr = LyricsView.clamp01(fill >= 0 ? fill : fx.progress);
+            Glass.rrect(ctx, x, 7, uw, 1, 0, (Math.round(a * 0.28f) << 24) | 0xFFFFFF);
+            Glass.rrect(ctx, x, 7, Math.max(1, Math.round(uw * pr)), 1, 0, (a << 24) | c1);
+        }
+
+        // -- twinkling glints around the text
+        if (s.sparkles && !light) {
+            int tint = LyricsView.mix(0xFFFFFFFF, 0xFF000000 | c1, 0.3f) & 0xFFFFFF;
+            for (int i = 0; i < 10; i++) {
+                float[] g = Flair.glint(i, time);
+                int ga = Math.round(a * g[2]);
+                if (ga < 10) continue;
+                int px = Math.round(g[0] * (twFull + 16)), py = Math.round(g[1] * 16);
+                int arm = (ga / 2) << 24 | tint;
+                ctx.fill(px, py, px + 1, py + 1, (ga << 24) | tint);
+                ctx.fill(px - 2, py, px, py + 1, arm);
+                ctx.fill(px + 1, py, px + 3, py + 1, arm);
+                ctx.fill(px, py - 2, px + 1, py, arm);
+                ctx.fill(px, py + 1, px + 1, py + 3, arm);
+            }
+        }
         m.popMatrix();
     }
 
@@ -259,7 +368,7 @@ public final class LyricsHud implements HudElement {
         int y = s.barBottom ? sh - bh - 8 : 6;
         boolean viz = s.reactive && s.reactBars;
         Glass.shadow(ctx, x, y, bw, bh, 10);
-        Glass.panel(ctx, x, y, bw, bh, 10, 0x66141A2A, 0.9f, 0.16f);
+        Glass.panel(ctx, x, y, bw, bh, 10, Glass.hudFill(0x66), 0.9f, 0.16f);
         Glass.text(ctx, font, Glass.fit(font, t.title() + "  -  " + t.artist(), bw - 18 - (viz ? 32 : 0)), x + 9, y + 5, 0xFFF2F5FA);
         String sub = lines == null ? "Loading lyrics..." : lines.isEmpty() ? "No synced lyrics"
                 : LyricsView.clock(t.positionMs()) + " / " + LyricsView.clock(t.durationMs());

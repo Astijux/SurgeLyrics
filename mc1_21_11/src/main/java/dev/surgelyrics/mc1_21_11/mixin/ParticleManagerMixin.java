@@ -2,6 +2,7 @@ package dev.surgelyrics.mc1_21_11.mixin;
 
 import dev.surgelyrics.core.SurgeGovernor;
 import dev.surgelyrics.mc1_21_11.Runtime;
+import dev.surgelyrics.mc1_21_11.Safe;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleManager;
@@ -25,17 +26,21 @@ public class ParticleManagerMixin {
             at = @At("HEAD"), cancellable = true, require = 0)
     private void surgelyrics$far(ParticleEffect effect, double x, double y, double z, double vx, double vy, double vz,
                                  CallbackInfoReturnable<Particle> cir) {
-        SurgeGovernor g = Runtime.SURGE;
-        if (!g.active()) return;
-        var me = MinecraftClient.getInstance().player;
-        if (me != null && g.cullParticle(me.squaredDistanceTo(x, y, z))) cir.setReturnValue(null);
+        Safe.run("cull-particles", () -> {
+            SurgeGovernor g = Runtime.SURGE;
+            if (!g.active()) return;
+            var me = MinecraftClient.getInstance().player;
+            if (me != null && g.cullParticle(me.squaredDistanceTo(x, y, z))) cir.setReturnValue(null);
+        });
     }
 
     // Per-tick cap (Surge 1.0.0 hooked the same method, method_3058 = addParticle(Particle)).
     @Inject(method = "addParticle(Lnet/minecraft/client/particle/Particle;)V", at = @At("HEAD"),
             cancellable = true, require = 0)
     private void surgelyrics$cap(Particle particle, CallbackInfo ci) {
-        int budget = Runtime.SURGE.particleBudget();
-        if (budget > 0 && ++surgelyrics$spawned > budget) { Runtime.SURGE.countParticleCapped(); ci.cancel(); }
+        Safe.run("cap-particles", () -> {
+            int budget = Runtime.SURGE.particleBudget();
+            if (budget > 0 && ++surgelyrics$spawned > budget) { Runtime.SURGE.countParticleCapped(); ci.cancel(); }
+        });
     }
 }

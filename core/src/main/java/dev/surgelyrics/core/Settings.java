@@ -55,6 +55,31 @@ public final class Settings {
     public int uiTheme = 0;                  // index into Themes.ALL
     public int glassOpacity = 100;           // 30..100 percent, scales every glass surface
     public boolean windowGlow = true, windowSweep = true;
+    // PvP helpers (information the client already has; nothing here changes combat)
+    public final HudWidget target = new HudWidget(false, 1, 0, 34), effects = new HudWidget(false, 2, 0, 24),
+            items = new HudWidget(false, 3, 0, 40), coords = new HudWidget(false, 0, 0, 70),
+            cps = new HudWidget(false, 6, 6, -108),
+            health = new HudWidget(false, 7, -60, -52), speed = new HudWidget(false, 7, 60, -52), stance = new HudWidget(false, 6, 6, -130);
+    public int targetSource = 0;             // 0 last hit then crosshair, 1 last hit only, 2 crosshair only
+    public boolean targetArmor = true, targetDistance = true;
+    public int targetHoldSec = 5;            // 2..10
+    public boolean effectsLevel = true;
+    public int effectsWarnSec = 10;          // 0 = never flash, else flash when this few seconds remain
+    public boolean itemTotem = true, itemGapple = true, itemPearl = true, itemCrystal = false, itemXp = false, itemArrow = false;
+    public boolean itemsHideZero = false, itemsVertical = false;
+    public int coordsDecimals = 0;           // 0..2
+    public boolean coordsFacing = true, coordsNether = false;
+    public boolean cpsRight = true;
+    public boolean healthAbsorb = true, healthColorize = true;
+    public int speedDecimals = 1;            // 0..2
+    public boolean stanceAlways = false;     // also show "Walking" when you are neither sprinting nor sneaking
+    public boolean lowTotemWarn = false;     // pulsing "NO TOTEM" when you hold none
+    public boolean lowHealthWarn = false;
+    public int lowHealthHp = 6;              // 2..20 (half hearts)
+    public boolean lowArmorFlash = true;
+    public int armorWarnPct = 15;            // 5..50
+    public boolean zoom = true;
+    public int zoomFactor = 4;               // 2..10
     // lyric transitions
     public int transition = 1;               // 0 fade, 1 slide, 2 zoom, 3 bounce, 4 words
     public int transitionMs = 320;           // 150..800
@@ -77,10 +102,16 @@ public final class Settings {
     private static int cl(int v, int lo, int hi) { return Math.max(lo, Math.min(hi, v)); }
 
     public HudWidget[] widgets() { return new HudWidget[]{armor, keys, ping, timer, reach, combo, hotbar}; }
+    public HudWidget[] pvpWidgets() { return new HudWidget[]{target, effects, items, coords, cps, health, speed, stance}; }
+    public static final String[] PVP_NAMES = {"target", "effects", "items", "coords", "cps", "health", "speed", "stance"};
     public static final String[] WIDGET_NAMES = {"armor", "keys", "ping", "timer", "reach", "combo", "hotbar"};
 
     public void clamp() {
         for (HudWidget w : widgets()) w.clamp();
+        for (HudWidget w : pvpWidgets()) w.clamp();
+        targetSource = cl(targetSource, 0, 2); targetHoldSec = cl(targetHoldSec, 2, 10); effectsWarnSec = cl(effectsWarnSec, 0, 30);
+        coordsDecimals = cl(coordsDecimals, 0, 2); lowHealthHp = cl(lowHealthHp, 2, 20); armorWarnPct = cl(armorWarnPct, 5, 50);
+        zoomFactor = cl(zoomFactor, 2, 10); speedDecimals = cl(speedDecimals, 0, 2);
         armorDur = cl(armorDur, 0, 3); timerMode = cl(timerMode, 0, 1);
         reachDecimals = cl(reachDecimals, 1, 3); comboSeconds = cl(comboSeconds, 1, 10);
         backdrop = cl(backdrop, 0, 3); reflection = cl(reflection, 0, 60); waveAmp = cl(waveAmp, 0, 6);
@@ -148,6 +179,25 @@ public final class Settings {
                 Map<String, Object> hud = Json.obj(m.get("hud"));
                 HudWidget[] ws = s.widgets();
                 for (int i = 0; i < ws.length; i++) ws[i].load(Json.obj(hud.get(WIDGET_NAMES[i])));
+                Map<String, Object> pvp = Json.obj(m.get("pvp"));
+                HudWidget[] pw = s.pvpWidgets();
+                for (int i = 0; i < pw.length; i++) pw[i].load(Json.obj(pvp.get(PVP_NAMES[i])));
+                s.targetSource = (int) Json.num(m.get("targetSource"), s.targetSource); s.targetHoldSec = (int) Json.num(m.get("targetHoldSec"), s.targetHoldSec);
+                s.targetArmor = Json.bool(m.get("targetArmor"), s.targetArmor); s.targetDistance = Json.bool(m.get("targetDistance"), s.targetDistance);
+                s.effectsLevel = Json.bool(m.get("effectsLevel"), s.effectsLevel); s.effectsWarnSec = (int) Json.num(m.get("effectsWarnSec"), s.effectsWarnSec);
+                s.itemTotem = Json.bool(m.get("itemTotem"), s.itemTotem); s.itemGapple = Json.bool(m.get("itemGapple"), s.itemGapple);
+                s.itemPearl = Json.bool(m.get("itemPearl"), s.itemPearl); s.itemCrystal = Json.bool(m.get("itemCrystal"), s.itemCrystal);
+                s.itemXp = Json.bool(m.get("itemXp"), s.itemXp); s.itemArrow = Json.bool(m.get("itemArrow"), s.itemArrow);
+                s.itemsHideZero = Json.bool(m.get("itemsHideZero"), s.itemsHideZero); s.itemsVertical = Json.bool(m.get("itemsVertical"), s.itemsVertical);
+                s.coordsDecimals = (int) Json.num(m.get("coordsDecimals"), s.coordsDecimals);
+                s.coordsFacing = Json.bool(m.get("coordsFacing"), s.coordsFacing); s.coordsNether = Json.bool(m.get("coordsNether"), s.coordsNether);
+                s.cpsRight = Json.bool(m.get("cpsRight"), s.cpsRight);
+                s.healthAbsorb = Json.bool(m.get("healthAbsorb"), s.healthAbsorb); s.healthColorize = Json.bool(m.get("healthColorize"), s.healthColorize);
+                s.speedDecimals = (int) Json.num(m.get("speedDecimals"), s.speedDecimals);
+                s.stanceAlways = Json.bool(m.get("stanceAlways"), s.stanceAlways); s.lowTotemWarn = Json.bool(m.get("lowTotemWarn"), s.lowTotemWarn);
+                s.lowHealthWarn = Json.bool(m.get("lowHealthWarn"), s.lowHealthWarn); s.lowHealthHp = (int) Json.num(m.get("lowHealthHp"), s.lowHealthHp);
+                s.lowArmorFlash = Json.bool(m.get("lowArmorFlash"), s.lowArmorFlash); s.armorWarnPct = (int) Json.num(m.get("armorWarnPct"), s.armorWarnPct);
+                s.zoom = Json.bool(m.get("zoom"), s.zoom); s.zoomFactor = (int) Json.num(m.get("zoomFactor"), s.zoomFactor);
                 s.armorVertical = Json.bool(m.get("armorVertical"), s.armorVertical); s.armorHands = Json.bool(m.get("armorHands"), s.armorHands);
                 s.armorDur = (int) Json.num(m.get("armorDur"), s.armorDur);
                 s.keysMouse = Json.bool(m.get("keysMouse"), s.keysMouse); s.keysSpace = Json.bool(m.get("keysSpace"), s.keysSpace);
@@ -199,6 +249,19 @@ public final class Settings {
         HudWidget[] ws = widgets();
         for (int i = 0; i < ws.length; i++) hud.put(WIDGET_NAMES[i], ws[i].toMap());
         m.put("hud", hud);
+        Map<String, Object> pvp = new LinkedHashMap<>();
+        HudWidget[] pw = pvpWidgets();
+        for (int i = 0; i < pw.length; i++) pvp.put(PVP_NAMES[i], pw[i].toMap());
+        m.put("pvp", pvp);
+        m.put("targetSource", targetSource); m.put("targetHoldSec", targetHoldSec); m.put("targetArmor", targetArmor);
+        m.put("targetDistance", targetDistance); m.put("effectsLevel", effectsLevel); m.put("effectsWarnSec", effectsWarnSec);
+        m.put("itemTotem", itemTotem); m.put("itemGapple", itemGapple); m.put("itemPearl", itemPearl); m.put("itemCrystal", itemCrystal);
+        m.put("itemXp", itemXp); m.put("itemArrow", itemArrow); m.put("itemsHideZero", itemsHideZero); m.put("itemsVertical", itemsVertical);
+        m.put("coordsDecimals", coordsDecimals); m.put("coordsFacing", coordsFacing); m.put("coordsNether", coordsNether);
+        m.put("healthAbsorb", healthAbsorb); m.put("healthColorize", healthColorize); m.put("speedDecimals", speedDecimals);
+        m.put("stanceAlways", stanceAlways); m.put("lowTotemWarn", lowTotemWarn);
+        m.put("cpsRight", cpsRight); m.put("lowHealthWarn", lowHealthWarn); m.put("lowHealthHp", lowHealthHp);
+        m.put("lowArmorFlash", lowArmorFlash); m.put("armorWarnPct", armorWarnPct); m.put("zoom", zoom); m.put("zoomFactor", zoomFactor);
         m.put("armorVertical", armorVertical); m.put("armorHands", armorHands); m.put("armorDur", armorDur);
         m.put("keysMouse", keysMouse); m.put("keysSpace", keysSpace); m.put("keysCps", keysCps);
         m.put("pingColorize", pingColorize); m.put("timerMode", timerMode); m.put("reachDecimals", reachDecimals);

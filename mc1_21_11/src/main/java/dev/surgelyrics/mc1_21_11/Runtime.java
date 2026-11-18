@@ -18,6 +18,13 @@ public final class Runtime {
     public static final AudioLevel AUDIO = new AudioLevel();
     public static final AudioReact REACT = new AudioReact();
     public static final long LAUNCH_MS = System.currentTimeMillis();
+
+    // last thing you hit (for the target HUD) and hold-to-zoom state
+    public static volatile int lastTargetId = -1;
+    public static volatile long lastTargetMs;
+    public static volatile boolean zoomHeld;
+    public static final Motion.Spring ZOOM = new Motion.Spring(0f, 240f, 24f);
+    public static long zoomLastNanos = System.nanoTime();
     public static final LrcLib LYRICS = new LrcLib();
     public static final Spotify SPOTIFY = new Spotify(SETTINGS, TOKEN_FILE);
     public static final WindowsMedia WINDOWS = new WindowsMedia();

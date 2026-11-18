@@ -20,8 +20,6 @@ final class HudWidgets {
 
     private long lastNanos = System.nanoTime();
     private final float[] press = new float[7];                 // W A S D space LMB RMB
-    private final ClickCounter lmb = new ClickCounter(), rmb = new ClickCounter();
-    private boolean lmbWas, rmbWas;
     private Object lastWorld;
     private long worldJoinMs = System.currentTimeMillis();
     private int lastHurt;
@@ -35,35 +33,37 @@ final class HudWidgets {
         long now = System.currentTimeMillis();
         Settings s = Runtime.SETTINGS;
 
-        if (mc.world != lastWorld) { lastWorld = mc.world; worldJoinMs = now; }
-        Runtime.COMBAT.setTimeoutMs(s.comboSeconds * 1000L);
-        int hurt = player.hurtTime;                              // VERIFY: public hurtTime field on LivingEntity
-        if (hurt > lastHurt) Runtime.COMBAT.damaged();
-        lastHurt = hurt;
+        Safe.run("widget-state", () -> {
+            if (mc.world != lastWorld) { lastWorld = mc.world; worldJoinMs = now; }
+            Runtime.COMBAT.setTimeoutMs(s.comboSeconds * 1000L);
+            int hurt = player.hurtTime;                          // VERIFY: public hurtTime field on LivingEntity
+            if (hurt > lastHurt) Runtime.COMBAT.damaged();
+            lastHurt = hurt;
+        });
 
-        if (s.armor.on) armor(ctx, mc, tr, s, sw, sh);
-        if (s.keys.on) keys(ctx, mc, tr, s, sw, sh, dt, now);
-        if (s.timer.on) {
+        if (s.armor.on) Safe.gui("armor", ctx, () -> armor(ctx, mc, tr, s, sw, sh));
+        if (s.keys.on) Safe.gui("keystrokes", ctx, () -> keys(ctx, mc, tr, s, sw, sh, dt, now));
+        if (s.timer.on) Safe.gui("timer", ctx, () -> {
             String v = Fmt.duration(now - (s.timerMode == 0 ? Runtime.LAUNCH_MS : worldJoinMs));
             text(ctx, tr, s.timer, s.timerMode == 0 ? "Session" : "World", v, s.timer.color, sw, sh, 1f);
-        }
-        if (s.ping.on) {
+        });
+        if (s.ping.on) Safe.gui("ping", ctx, () -> {
             int ms = -1;
             var nh = mc.getNetworkHandler();
             if (nh != null) { var e = nh.getPlayerListEntry(player.getUuid()); if (e != null) ms = e.getLatency(); }
             String v = mc.isInSingleplayer() ? "local" : ms <= 0 ? "--" : ms + " ms";
             text(ctx, tr, s.ping, "Ping", v, s.pingColorize && ms > 0 ? Colors.pingColor(ms) : s.ping.color, sw, sh, 1f);
-        }
-        if (s.reach.on) {
+        });
+        if (s.reach.on) Safe.gui("reach", ctx, () -> {
             double r = Runtime.COMBAT.reach(now);
             text(ctx, tr, s.reach, "Reach", r < 0 ? "--" : Fmt.fixed(r, s.reachDecimals), s.reach.color, sw, sh, 1f);
-        }
-        if (s.combo.on) {
+        });
+        if (s.combo.on) Safe.gui("combo", ctx, () -> {
             int n = Runtime.COMBAT.combo(now);
             float age = (now - Runtime.COMBAT.lastHitMs()) / 250f;
             float pop = n > 0 ? 1f + 0.25f * Math.max(0f, 1f - age) : 1f;       // small pop when the combo grows
             text(ctx, tr, s.combo, "Combo", String.valueOf(n), s.combo.color, sw, sh, pop);
-        }
+        });
     }
 
     // ------------------------------------------------------------------ placement helpers
@@ -88,7 +88,7 @@ final class HudWidgets {
         if (!c.bg) return;
         Settings s = Runtime.SETTINGS;
         float pulse = s.reactive && s.reactWidgets ? LyricsHud.pulse(s) : 0f;       // audio reaction tints the glass
-        int fill = pulse > 0.02f ? LyricsView.mix(0x5A141A2A, (0x90 << 24) | (s.colour & 0xFFFFFF), pulse * 0.6f) : 0x5A141A2A;
+        int fill = pulse > 0.02f ? LyricsView.mix(Glass.hudFill(0x5A), (0x90 << 24) | (s.colour & 0xFFFFFF), pulse * 0.6f) : Glass.hudFill(0x5A);
         Glass.panel(ctx, 0, 0, w, h, 8, fill, 0.6f + 0.35f * pulse, 0.12f);
     }
 
@@ -154,6 +154,10 @@ final class HudWidgets {
         for (int i = 0; i < n; i++) {
             ItemStack st = stacks.get(i);
             int col = frac[i] >= 0 ? Colors.health(frac[i]) : 0xFFFFFFFF;
+            if (frac[i] >= 0 && s.lowArmorFlash) {                       // low durability: blink red/white so you notice mid-fight
+                float fl = Warn.armorFlash(frac[i], s.armorWarnPct, LyricsHud.time());
+                if (fl > 0f) col = LyricsView.mix(0xFFEF4444, 0xFFFFFFFF, fl);
+            }
             if (vert) {
                 int x = PAD, y = PAD + i * 18;
                 ctx.drawItem(st, x, y);
@@ -181,13 +185,7 @@ final class HudWidgets {
 
     private void keys(DrawContext ctx, MinecraftClient mc, TextRenderer tr, Settings s, int sw, int sh, float dt, long now) {
         var o = mc.options;
-        boolean noScreen = mc.currentScreen == null;
-        long win = mc.getWindow().getHandle();
-        boolean l = noScreen && GLFW.glfwGetMouseButton(win, GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
-        boolean r = noScreen && GLFW.glfwGetMouseButton(win, GLFW.GLFW_MOUSE_BUTTON_RIGHT) == GLFW.GLFW_PRESS;
-        if (l && !lmbWas) lmb.click(now);
-        if (r && !rmbWas) rmb.click(now);
-        lmbWas = l; rmbWas = r;
+        boolean l = Clicks.leftDown(), r = Clicks.rightDown();
 
         boolean[] down = {o.forwardKey.isPressed(), o.leftKey.isPressed(), o.backKey.isPressed(), o.rightKey.isPressed(),
                 o.jumpKey.isPressed(), l, r};
@@ -213,8 +211,8 @@ final class HudWidgets {
         }
         if (s.keysMouse) {
             int mw = (inner - gap) / 2;
-            key(ctx, tr, PAD, y, mw, cell, "LMB", press[5], c, s.keysCps ? String.valueOf(lmb.cps(now)) : null);
-            key(ctx, tr, PAD + mw + gap, y, mw, cell, "RMB", press[6], c, s.keysCps ? String.valueOf(rmb.cps(now)) : null);
+            key(ctx, tr, PAD, y, mw, cell, "LMB", press[5], c, s.keysCps ? String.valueOf(Clicks.L.cps(now)) : null);
+            key(ctx, tr, PAD + mw + gap, y, mw, cell, "RMB", press[6], c, s.keysCps ? String.valueOf(Clicks.R.cps(now)) : null);
         }
         end(ctx);
     }

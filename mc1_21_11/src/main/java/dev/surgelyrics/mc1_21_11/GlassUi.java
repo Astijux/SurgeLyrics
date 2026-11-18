@@ -21,6 +21,8 @@ final class GlassUi {
     String active;
     /** If set, the next slider draws its track as a gradient through these colours (then clears it). */
     int[] trackStops;
+    /** Help text for whatever the mouse is over this frame (shown in the footer). */
+    String tip;
     private final Map<String, Motion.Spring> springs = new HashMap<>();
 
     void begin(DrawContext c, TextRenderer font, float mx, float my, boolean down, float dt) {
@@ -29,7 +31,10 @@ final class GlassUi {
         released = !down && wasDown;
         wasDown = down;
         if (released) active = null;
+        tip = null;
     }
+
+    void tip(int x, int y, int w, int h, String text) { if (hover(x, y, w, h)) tip = text; }
 
     boolean hover(float x, float y, float w, float h) { return mx >= x && mx < x + w && my >= y && my < y + h; }
 

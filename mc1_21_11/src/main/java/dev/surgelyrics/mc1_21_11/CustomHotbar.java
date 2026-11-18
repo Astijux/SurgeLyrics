@@ -42,7 +42,7 @@ final class CustomHotbar {
 
         int accent = c.color & 0xFFFFFF;
         if (c.bg) {
-            if (s.hotbarStyle == 0) Glass.panel(ctx, 0, 0, w, h, 10, 0x66141A2A, 0.8f, 0.14f);
+            if (s.hotbarStyle == 0) Glass.panel(ctx, 0, 0, w, h, 10, Glass.hudFill(0x66), 0.8f, 0.14f);
             else if (s.hotbarStyle == 1) Glass.rrect(ctx, 0, 0, w, h, 5, 0xCC0D1017);
         }
         float hx = PAD + pos * SLOT;

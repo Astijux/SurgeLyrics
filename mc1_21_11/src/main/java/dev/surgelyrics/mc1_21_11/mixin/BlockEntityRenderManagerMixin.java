@@ -3,6 +3,7 @@ package dev.surgelyrics.mc1_21_11.mixin;
 import dev.surgelyrics.core.SurgeGovernor;
 import dev.surgelyrics.mc1_21_11.Runtime;
 import dev.surgelyrics.mc1_21_11.OcclusionHelper;
+import dev.surgelyrics.mc1_21_11.Safe;
 import net.minecraft.block.entity.BeaconBlockEntity;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.block.entity.EndGatewayBlockEntity;
@@ -20,19 +21,21 @@ public class BlockEntityRenderManagerMixin {
     @Inject(method = "get", at = @At("HEAD"), cancellable = true, require = 0)
     @SuppressWarnings({"rawtypes", "unchecked"})
     private void surgelyrics$cull(BlockEntity be, CallbackInfoReturnable cir) {
-        SurgeGovernor g = Runtime.SURGE;
-        if (!g.active() || be instanceof BeaconBlockEntity || be instanceof EndGatewayBlockEntity) return;
-        var me = MinecraftClient.getInstance().player;
-        if (me == null) return;
-        BlockPos p = be.getPos();
-        if (g.cullBlockEntity(me.squaredDistanceTo(p.getX() + 0.5, p.getY() + 0.5, p.getZ() + 0.5))) {
-            cir.setReturnValue(null);
-            return;
-        }
-        var eye = me.getEyePos();
-        if (Runtime.SETTINGS.occludeBlocks && OcclusionHelper.blockEntityHidden(be, eye.x, eye.y, eye.z)) {   // behind solid blocks
-            g.countOccluded();
-            cir.setReturnValue(null);
-        }
+        Safe.run("cull-blocks", () -> {
+            SurgeGovernor g = Runtime.SURGE;
+            if (!g.active() || be instanceof BeaconBlockEntity || be instanceof EndGatewayBlockEntity) return;
+            var me = MinecraftClient.getInstance().player;
+            if (me == null) return;
+            BlockPos p = be.getPos();
+            if (g.cullBlockEntity(me.squaredDistanceTo(p.getX() + 0.5, p.getY() + 0.5, p.getZ() + 0.5))) {
+                cir.setReturnValue(null);
+                return;
+            }
+            var eye = me.getEyePos();
+            if (Runtime.SETTINGS.occludeBlocks && OcclusionHelper.blockEntityHidden(be, eye.x, eye.y, eye.z)) {   // behind solid blocks
+                g.countOccluded();
+                cir.setReturnValue(null);
+            }
+        });
     }
 }

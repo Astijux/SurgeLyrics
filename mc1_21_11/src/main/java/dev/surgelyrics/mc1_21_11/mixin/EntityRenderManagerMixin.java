@@ -3,6 +3,7 @@ package dev.surgelyrics.mc1_21_11.mixin;
 import dev.surgelyrics.core.SurgeGovernor;
 import dev.surgelyrics.mc1_21_11.Runtime;
 import dev.surgelyrics.mc1_21_11.OcclusionHelper;
+import dev.surgelyrics.mc1_21_11.Safe;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.render.Frustum;
@@ -27,26 +28,28 @@ public class EntityRenderManagerMixin {
     @Inject(method = "shouldRender", at = @At("HEAD"), cancellable = true, require = 0)
     private void surgelyrics$cull(Entity entity, Frustum frustum, double x, double y, double z,
                                   CallbackInfoReturnable<Boolean> cir) {
-        SurgeGovernor g = Runtime.SURGE;
-        if (!g.active()) return;
-        MinecraftClient mc = MinecraftClient.getInstance();
-        ClientPlayerEntity me = mc.player;
-        // Never hide: you, the camera, other players, glowing things, bosses, your mount/riders and your own pets.
-        if (entity == me || entity == mc.getCameraEntity() || entity instanceof PlayerEntity || entity.isGlowing()) return;
-        if (entity instanceof EnderDragonEntity || entity instanceof WitherEntity) return;
-        if (me != null) {
-            if (entity == me.getVehicle() || entity.hasPassenger(me)) return;
-            if (entity instanceof TameableEntity pet && pet.isOwner(me)) return;
-        }
-        double d = entity.squaredDistanceTo(x, y, z);
-        boolean far;
-        if (entity instanceof ItemEntity || entity instanceof ExperienceOrbEntity) far = g.cullItem(d);
-        else if (entity instanceof AbstractDecorationEntity || entity instanceof ArmorStandEntity) far = g.cullDecoration(d);
-        else far = g.cullMob(d);
-        if (!far && Runtime.SETTINGS.occludeMobs && OcclusionHelper.entityHidden(entity, x, y, z)) {   // behind solid blocks
-            g.countOccluded();
-            far = true;
-        }
-        if (far) cir.setReturnValue(false);
+        Safe.run("cull-entities", () -> {
+            SurgeGovernor g = Runtime.SURGE;
+            if (!g.active()) return;
+            MinecraftClient mc = MinecraftClient.getInstance();
+            ClientPlayerEntity me = mc.player;
+            // Never hide: you, the camera, other players, glowing things, bosses, your mount/riders and your own pets.
+            if (entity == me || entity == mc.getCameraEntity() || entity instanceof PlayerEntity || entity.isGlowing()) return;
+            if (entity instanceof EnderDragonEntity || entity instanceof WitherEntity) return;
+            if (me != null) {
+                if (entity == me.getVehicle() || entity.hasPassenger(me)) return;
+                if (entity instanceof TameableEntity pet && pet.isOwner(me)) return;
+            }
+            double d = entity.squaredDistanceTo(x, y, z);
+            boolean far;
+            if (entity instanceof ItemEntity || entity instanceof ExperienceOrbEntity) far = g.cullItem(d);
+            else if (entity instanceof AbstractDecorationEntity || entity instanceof ArmorStandEntity) far = g.cullDecoration(d);
+            else far = g.cullMob(d);
+            if (!far && Runtime.SETTINGS.occludeMobs && OcclusionHelper.entityHidden(entity, x, y, z)) {   // behind solid blocks
+                g.countOccluded();
+                far = true;
+            }
+            if (far) cir.setReturnValue(false);
+        });
     }
 }

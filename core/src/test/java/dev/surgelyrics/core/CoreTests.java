@@ -296,7 +296,7 @@ public final class CoreTests {
 
         // ---- fonts
         check("all font keys unique", java.util.Arrays.stream(FontStyle.values()).map(fnt -> fnt.key).distinct().count() == FontStyle.values().length);
-        check("37 fonts, 5 pages", FontStyle.values().length == 37 && FontStyle.pages() == 5);
+        check("35 fonts, 5 pages", FontStyle.values().length == 35 && FontStyle.pages() == 5);
         check("every font key is a legal resource name", java.util.Arrays.stream(FontStyle.values()).filter(fnt -> fnt.key != null).allMatch(fnt -> fnt.key.matches("[a-z0-9_]+")));
 
         // ---- hex colours
@@ -516,8 +516,8 @@ public final class CoreTests {
         check("wave travels along the letters", Flair.wave(0, 1f, 3f) != Flair.wave(5, 1f, 3f));
 
         // ---- Themes
-        check("six themes with unique names", Themes.ALL.length == 6 && java.util.Arrays.stream(Themes.ALL).map(Themes.Theme::name).distinct().count() == 6);
-        eq("theme index clamps", Themes.of(99), Themes.ALL[5]);
+        check("twelve themes with unique names", Themes.ALL.length == 12 && java.util.Arrays.stream(Themes.ALL).map(Themes.Theme::name).distinct().count() == 12);
+        eq("theme index clamps", Themes.of(99), Themes.ALL[11]);
         eq("theme index clamps low", Themes.of(-3), Themes.ALL[0]);
         eq("theme body keeps colour", Themes.body(0, 0x70, 100) & 0xFFFFFF, 0x141A2A);
         eq("theme opacity scales alpha", Themes.body(0, 200, 50) >>> 24, 100);
@@ -526,7 +526,7 @@ public final class CoreTests {
         // ---- flair settings
         Settings fl = new Settings();
         fl.backdrop = 9; fl.reflection = 500; fl.waveAmp = -2; fl.uiTheme = 77; fl.glassOpacity = 3; fl.clamp();
-        eq("flair clamps", fl.backdrop + "," + fl.reflection + "," + fl.waveAmp + "," + fl.uiTheme + "," + fl.glassOpacity, "3,60,0,5,30");
+        eq("flair clamps", fl.backdrop + "," + fl.reflection + "," + fl.waveAmp + "," + fl.uiTheme + "," + fl.glassOpacity, "3,60,0,11,30");
         fl.backdrop = 2; fl.reflection = 35; fl.waveAmp = 3; fl.sparkles = true; fl.underline = true; fl.edgeGlow = true;
         fl.uiTheme = 3; fl.glassOpacity = 65; fl.windowGlow = false; fl.windowSweep = false;
         Path ff = dir.resolve("flair.json"); fl.save(ff);
@@ -534,6 +534,104 @@ public final class CoreTests {
         eq("flair roundtrip", fr.backdrop + "," + fr.reflection + "," + fr.waveAmp + "," + fr.sparkles + "," + fr.underline + "," + fr.edgeGlow
                 + "," + fr.uiTheme + "," + fr.glassOpacity + "," + fr.windowGlow + "," + fr.windowSweep, "2,35,3,true,true,true,3,65,false,false");
         eq("flair defaults are subtle", new Settings().backdrop + "," + new Settings().reflection + "," + new Settings().sparkles, "0,0,false");
+
+        // ---- PvP helpers: formatting
+        eq("roman small", Fmt.roman(1) + Fmt.roman(2) + Fmt.roman(4) + Fmt.roman(9) + Fmt.roman(10), "IIIIVIXX");
+        eq("roman out of range", Fmt.roman(17), "17");
+        eq("roman zero is empty", Fmt.roman(0), "");
+        eq("facing south", Fmt.facing(0f), "S"); eq("facing west", Fmt.facing(90f), "W");
+        eq("facing north", Fmt.facing(180f), "N"); eq("facing east via negative yaw", Fmt.facing(-90f), "E");
+        eq("facing south-west", Fmt.facing(45f), "SW"); eq("facing wraps over 360", Fmt.facing(720f + 90f), "W");
+        eq("facing big negative", Fmt.facing(-450f), "E");
+
+        // ---- Warn
+        eq("no health warning above threshold", Warn.health(10f, 6, 1.3f), 0f);
+        eq("no health warning when dead", Warn.health(0f, 6, 1.3f), 0f);
+        float maxLow = 0, maxMid = 0;
+        for (int k = 0; k < 400; k++) { maxLow = Math.max(maxLow, Warn.health(1f, 6, k * 0.02f)); maxMid = Math.max(maxMid, Warn.health(5f, 6, k * 0.02f)); }
+        check("lower health pulses harder", maxLow > maxMid + 0.2f && maxLow > 0.85f);
+        check("health warning stays in 0..1", java.util.stream.IntStream.range(0, 300).allMatch(k -> { float w = Warn.health(2f, 8, k * 0.05f); return w >= 0f && w <= 1f; }));
+        eq("no armor flash while healthy", Warn.armorFlash(0.6f, 15, 1.1f), 0f);
+        eq("no armor flash for non-damageable", Warn.armorFlash(-1f, 15, 1.1f), 0f);
+        float flashMin = 9, flashMax = 0;
+        for (int k = 0; k < 200; k++) { float af = Warn.armorFlash(0.1f, 15, k * 0.05f); flashMin = Math.min(flashMin, af); flashMax = Math.max(flashMax, af); }
+        check("armor flash blinks between dim and bright", flashMin < 0.1f && flashMax > 0.9f);
+        check("armor flash at exactly the threshold", Warn.armorFlash(0.15f, 15, 0.2f) > 0f);
+
+        // ---- Zoom
+        eq("zoom amount 0 leaves fov alone", Zoom.fov(70f, 0f, 4), 70f);
+        eq("zoom full divides by factor", Zoom.fov(80f, 1f, 4), 20f);
+        check("zoom halfway is in between", Zoom.fov(80f, 0.5f, 5) > 16f && Zoom.fov(80f, 0.5f, 5) < 80f);
+        eq("zoom never goes below 5 degrees", Zoom.fov(30f, 1f, 10), 5f);
+        eq("zoom clamps amount", Zoom.fov(60f, 9f, 3), 20f);
+
+        // ---- Presets
+        for (int pi = 0; pi < Presets.NAMES.length; pi++) {
+            Settings ps = new Settings();
+            Presets.apply(ps, pi);
+            Settings clamped = new Settings();
+            Presets.apply(clamped, pi); clamped.clamp();
+            check("preset " + Presets.NAMES[pi] + " is already within limits", ps.font == clamped.font && ps.glowStrength == clamped.glowStrength
+                    && ps.waveAmp == clamped.waveAmp && ps.sizePercent == clamped.sizePercent && ps.gradientMode == clamped.gradientMode);
+        }
+        Settings pa = new Settings(), pb = new Settings();
+        Presets.apply(pa, 1); Presets.apply(pb, 3);
+        check("presets differ", pa.font != pb.font && pa.colour != pb.colour && pa.transition != pb.transition);
+        Settings keep = new Settings(); keep.spotifyClientId = "abc"; keep.source = 2; keep.redirectPort = 20000;
+        Presets.apply(keep, 2);
+        eq("presets never touch accounts", keep.spotifyClientId + "," + keep.source + "," + keep.redirectPort, "abc,2,20000");
+        Settings pvp = new Settings(); Presets.apply(pvp, 4);
+        eq("PvP preset turns the PvP HUD on", pvp.target.on + "," + pvp.cps.on + "," + pvp.items.on + "," + pvp.effects.on + "," + pvp.lowHealthWarn, "true,true,true,true,true");
+        eq("PvP preset picks the PvP Surge profile", pvp.surgeProfile, "PVP");
+        check("PvP preset keeps lyrics small and quiet", pvp.sizePercent <= 80 && pvp.glowStrength == 0 && !pvp.showBar);
+
+        // ---- PvP settings
+        eq("eight pvp widgets", new Settings().pvpWidgets().length, 8);
+        eq("pvp widget names match", Settings.PVP_NAMES.length, new Settings().pvpWidgets().length);
+        eq("pvp widgets off by default", java.util.Arrays.stream(new Settings().pvpWidgets()).filter(w -> w.on).count(), 0L);
+        Settings pr = new Settings();
+        pr.target.on = true; pr.items.anchor = 5; pr.cps.scale = 140; pr.targetSource = 2; pr.targetHoldSec = 8; pr.effectsWarnSec = 20;
+        pr.itemCrystal = true; pr.itemTotem = false; pr.coordsDecimals = 2; pr.coordsNether = true; pr.cpsRight = false;
+        pr.lowHealthWarn = true; pr.lowHealthHp = 8; pr.armorWarnPct = 30; pr.zoom = false; pr.zoomFactor = 7;
+        Path pf = dir.resolve("pvp.json"); pr.save(pf);
+        Settings pl = Settings.load(pf);
+        eq("pvp widgets roundtrip", pl.target.on + "," + pl.items.anchor + "," + pl.cps.scale, "true,5,140");
+        eq("pvp options roundtrip", pl.targetSource + "," + pl.targetHoldSec + "," + pl.effectsWarnSec + "," + pl.itemCrystal + "," + pl.itemTotem
+                + "," + pl.coordsDecimals + "," + pl.coordsNether + "," + pl.cpsRight, "2,8,20,true,false,2,true,false");
+        eq("warnings roundtrip", pl.lowHealthWarn + "," + pl.lowHealthHp + "," + pl.armorWarnPct + "," + pl.zoom + "," + pl.zoomFactor, "true,8,30,false,7");
+        Files.writeString(pf, "{\"targetSource\":9,\"targetHoldSec\":99,\"effectsWarnSec\":-4,\"coordsDecimals\":8,\"lowHealthHp\":0,\"armorWarnPct\":999,\"zoomFactor\":1,\"pvp\":{\"target\":{\"scale\":9999}}}");
+        Settings pbad = Settings.load(pf);
+        eq("pvp settings clamp", pbad.targetSource + "," + pbad.targetHoldSec + "," + pbad.effectsWarnSec + "," + pbad.coordsDecimals + "," + pbad.lowHealthHp
+                + "," + pbad.armorWarnPct + "," + pbad.zoomFactor + "," + pbad.target.scale, "2,10,0,2,2,50,2,200");
+
+        // ---- Packs
+        eq("eighteen packs", Presets.NAMES.length + "," + Presets.DESC.length, "18,18");
+        eq("twelve looks, six pvp loadouts", Presets.looks().length + "," + Presets.pvps().length, "12,6");
+        check("pack names are unique", java.util.Arrays.stream(Presets.NAMES).distinct().count() == Presets.NAMES.length);
+        for (int pi = 0; pi < Presets.NAMES.length; pi++) {
+            Settings ps = new Settings(); Presets.apply(ps, pi);
+            check("pack " + Presets.NAMES[pi] + " keeps font and theme in range", ps.font >= 0 && ps.font < FontStyle.values().length && ps.uiTheme >= 0 && ps.uiTheme < Themes.ALL.length);
+            check("pack " + Presets.NAMES[pi] + " has swatches", Presets.swatch(pi).length == 2);
+            if (Presets.isPvp(pi)) check("pvp pack " + Presets.NAMES[pi] + " turns something on", java.util.Arrays.stream(ps.pvpWidgets()).anyMatch(w -> w.on));
+            else check("look pack " + Presets.NAMES[pi] + " leaves pvp widgets alone", java.util.Arrays.stream(ps.pvpWidgets()).noneMatch(w -> w.on));
+        }
+        Settings full = new Settings(); Presets.apply(full, 17);
+        check("PvP Full turns every pvp widget and alert on", java.util.Arrays.stream(full.pvpWidgets()).allMatch(w -> w.on) && full.lowTotemWarn && full.lowHealthWarn);
+        Settings lite = new Settings(); Presets.apply(full, 17); Presets.apply(lite, 13);
+        check("PvP Lite is lighter than Full", java.util.Arrays.stream(lite.pvpWidgets()).filter(w -> w.on).count() < java.util.Arrays.stream(full.pvpWidgets()).filter(w -> w.on).count());
+        Settings swap = new Settings(); Presets.apply(swap, 17); Presets.apply(swap, 13);
+        check("a loadout switches the previous one off", !swap.health.on && !swap.lowTotemWarn && swap.target.on);
+
+        // ---- New pvp widgets roundtrip
+        Settings nw = new Settings();
+        nw.health.on = true; nw.speed.on = true; nw.stance.on = true; nw.speed.scale = 130; nw.healthAbsorb = false; nw.healthColorize = false;
+        nw.speedDecimals = 2; nw.stanceAlways = true; nw.lowTotemWarn = true;
+        Path nwf = dir.resolve("newpvp.json"); nw.save(nwf);
+        Settings nl = Settings.load(nwf);
+        eq("new widgets roundtrip", nl.health.on + "," + nl.speed.on + "," + nl.stance.on + "," + nl.speed.scale, "true,true,true,130");
+        eq("new options roundtrip", nl.healthAbsorb + "," + nl.healthColorize + "," + nl.speedDecimals + "," + nl.stanceAlways + "," + nl.lowTotemWarn, "false,false,2,true,true");
+        Files.writeString(nwf, "{\"speedDecimals\":9}");
+        eq("speed decimals clamp", Settings.load(nwf).speedDecimals, 2);
 
         System.out.println(pass + " passed, " + fail + " failed");
         System.exit(fail == 0 ? 0 : 1);

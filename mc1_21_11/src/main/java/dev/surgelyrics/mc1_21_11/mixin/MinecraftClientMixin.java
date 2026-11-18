@@ -1,6 +1,7 @@
 package dev.surgelyrics.mc1_21_11.mixin;
 
 import dev.surgelyrics.mc1_21_11.Runtime;
+import dev.surgelyrics.mc1_21_11.Safe;
 import net.minecraft.client.MinecraftClient;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -13,7 +14,9 @@ public class MinecraftClientMixin {
     // VERIFY: getFramerateLimit exists in yarn 1.21.11 (private int getFramerateLimit()).
     @Inject(method = "getFramerateLimit", at = @At("RETURN"), cancellable = true, require = 0)
     private void surgelyrics$background(CallbackInfoReturnable<Integer> cir) {
-        int cap = Runtime.SETTINGS.backgroundFps;
-        if (cap > 0 && !MinecraftClient.getInstance().isWindowFocused()) cir.setReturnValue(Math.min(cir.getReturnValue(), cap));
+        Safe.run("background-fps", () -> {
+            int cap = Runtime.SETTINGS.backgroundFps;
+            if (cap > 0 && !MinecraftClient.getInstance().isWindowFocused()) cir.setReturnValue(Math.min(cir.getReturnValue(), cap));
+        });
     }
 }

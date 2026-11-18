@@ -25,4 +25,18 @@ public final class Fmt {
         while (sb.length() - dot - 1 < decimals) sb.append('0');
         return sb.substring(0, dot + 1 + decimals);
     }
+
+    /** 1 -> "I", 4 -> "IV", 10 -> "X"; anything outside 1..10 falls back to the plain number (0 or less gives ""). */
+    public static String roman(int n) {
+        if (n <= 0) return "";
+        String[] r = {"", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"};
+        return n <= 10 ? r[n] : String.valueOf(n);
+    }
+
+    /** Minecraft yaw to compass: yaw 0 faces south, 90 west, 180 north, -90 (270) east. */
+    public static String facing(float yaw) {
+        String[] names = {"S", "SW", "W", "NW", "N", "NE", "E", "SE"};
+        float y = ((yaw % 360f) + 360f) % 360f;
+        return names[Math.round(y / 45f) % 8];
+    }
 }

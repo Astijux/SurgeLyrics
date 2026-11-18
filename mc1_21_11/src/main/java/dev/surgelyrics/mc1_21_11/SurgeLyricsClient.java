@@ -23,6 +23,8 @@ public final class SurgeLyricsClient implements ClientModInitializer {
                 new KeyBinding("key.surgelyrics.settings", GLFW.GLFW_KEY_K, category));
         KeyBinding profileKey = KeyBindingHelper.registerKeyBinding(
                 new KeyBinding("key.surgelyrics.profile", GLFW.GLFW_KEY_UNKNOWN, category));
+        KeyBinding zoomKey = KeyBindingHelper.registerKeyBinding(
+                new KeyBinding("key.surgelyrics.zoom", GLFW.GLFW_KEY_C, category));
 
         // VERIFY: HudElementRegistry method name (addLast) in the Fabric API build you pick.
         HudElementRegistry.addLast(Identifier.of("surgelyrics", "hud"), new LyricsHud());
@@ -32,16 +34,22 @@ public final class SurgeLyricsClient implements ClientModInitializer {
         CustomHotbar hotbar = new CustomHotbar();
         HudElementRegistry.replaceElement(VanillaHudElements.HOTBAR, original -> (ctx, tickCounter) -> {
             var mc = net.minecraft.client.MinecraftClient.getInstance();
-            if (Runtime.SETTINGS.hotbar.on && mc.player != null && !mc.player.isSpectator()) {
+            if (Runtime.SETTINGS.hotbar.on && !Safe.isOff("hotbar") && mc.player != null && !mc.player.isSpectator()) {
                 Glass.fast = true;
-                try { hotbar.render(ctx, mc, mc.textRenderer, ctx.getScaledWindowWidth(), ctx.getScaledWindowHeight()); }
-                finally { Glass.fast = false; }
+                try {
+                    hotbar.render(ctx, mc, mc.textRenderer, ctx.getScaledWindowWidth(), ctx.getScaledWindowHeight());
+                } catch (Throwable t) {            // anything wrong: give the player the vanilla hotbar back, for good
+                    Safe.fail("hotbar", t);
+                    Safe.unwind(ctx);
+                    original.render(ctx, tickCounter);
+                } finally { Glass.fast = false; }
             } else {
                 original.render(ctx, tickCounter);
             }
         });
 
-        ClientTickEvents.END_CLIENT_TICK.register(mc -> {
+        ClientTickEvents.END_CLIENT_TICK.register(mc -> Safe.run("keybinds", () -> {
+            Runtime.zoomHeld = zoomKey.isPressed();
             while (settingsKey.wasPressed()) mc.setScreen(new SettingsScreen(mc.currentScreen));
             while (profileKey.wasPressed()) {
                 SurgeProfile next = SurgeProfile.byName(Runtime.SETTINGS.surgeProfile).next();
@@ -50,7 +58,7 @@ public final class SurgeLyricsClient implements ClientModInitializer {
                 Runtime.save();
                 if (mc.player != null) mc.player.sendMessage(Text.literal("Surge: " + next.label), true);
             }
-        });
+        }));
 
         ClientLifecycleEvents.CLIENT_STOPPING.register(mc -> { Runtime.SPOTIFY.stop(); Runtime.WINDOWS.stop(); Runtime.AUDIO.stop(); Runtime.save(); });
         Runtime.SPOTIFY.start();   // cheap no-op polling until you connect

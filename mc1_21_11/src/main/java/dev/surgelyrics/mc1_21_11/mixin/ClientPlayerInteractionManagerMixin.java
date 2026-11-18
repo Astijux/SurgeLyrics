@@ -2,6 +2,7 @@ package dev.surgelyrics.mc1_21_11.mixin;
 
 import dev.surgelyrics.core.Reach;
 import dev.surgelyrics.mc1_21_11.Runtime;
+import dev.surgelyrics.mc1_21_11.Safe;
 import net.minecraft.client.network.ClientPlayerInteractionManager;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
@@ -17,11 +18,13 @@ public class ClientPlayerInteractionManagerMixin {
     // Feeds the reach and combo widgets. VERIFY: attackEntity(PlayerEntity, Entity) in yarn 1.21.11.
     @Inject(method = "attackEntity", at = @At("HEAD"), require = 0)
     private void surgelyrics$attack(PlayerEntity player, Entity target, CallbackInfo ci) {
-        try {
+        Safe.run("combat-hook", () -> {
             Vec3d eye = player.getEyePos();
             Box b = target.getBoundingBox();
             double reach = Reach.distance(eye.x, eye.y, eye.z, b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ);
             Runtime.COMBAT.hit(System.currentTimeMillis(), reach);
-        } catch (RuntimeException ignored) { /* a stats widget must never break combat */ }
+            Runtime.lastTargetId = target.getId();
+            Runtime.lastTargetMs = System.currentTimeMillis();
+        });
     }
 }

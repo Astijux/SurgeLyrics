@@ -2,6 +2,8 @@ package dev.surgelyrics.mc1_21_11;
 
 import dev.surgelyrics.core.LyricsView;
 import dev.surgelyrics.core.RoundRects;
+import dev.surgelyrics.core.Settings;
+import dev.surgelyrics.core.Themes;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 
@@ -23,6 +25,12 @@ final class Glass {
 
     /** When non-zero, the rim light is tinted toward this colour (used for the main window). */
     static int rimTint = 0;
+
+    /** Themed glass body colour for HUD panels, scaled by the user's glass opacity. */
+    static int hudFill(int alpha) {
+        Settings st = Runtime.SETTINGS;
+        return Themes.body(st.uiTheme, alpha, st.glassOpacity);
+    }
 
     static int a(int argb) { return LyricsView.withAlpha(argb, alpha); }
     static int white(float a) { return LyricsView.withAlpha(0xFFFFFFFF, a); }

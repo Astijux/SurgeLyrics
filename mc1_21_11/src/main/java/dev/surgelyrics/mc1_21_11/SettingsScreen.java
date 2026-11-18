@@ -18,8 +18,8 @@ import java.util.function.IntConsumer;
  * with the mouse. Drawn immediate-mode over the game's background blur; the mouse is polled from GLFW.
  */
 public final class SettingsScreen extends Screen {
-    private static final int W = 460, H = 262;
-    private static final String[] TABS = {"Lyrics", "Style", "Layout", "Colour", "Effects", "HUD", "Audio", "Surge", "Culling", "Source"};
+    private static final int W = 540, H = 262;
+    private static final String[] TABS = {"Lyrics", "Style", "Layout", "Colour", "FX", "Flair", "HUD", "PvP", "Audio", "Packs", "Surge", "Cull", "Source"};
     private static final String[] MOTION = {"Calm", "Normal", "Lively"};
     private static final String[] SOURCES = {"Auto", "Windows", "Spotify"};
     private static final String[] DEPTH = {"Flat", "3D", "Outline"};
@@ -28,12 +28,17 @@ public final class SettingsScreen extends Screen {
     private static final String[] WIDGETS = {"Armor", "Keys", "Ping", "Timer", "Reach", "Combo", "Hotbar"};
     private static final String[] ARMOR_LAYOUT = {"Vertical", "Horizontal"};
     private static final String[] DURABILITY = {"None", "Bar", "Number", "Percent"};
+    private static final String[] PVP_CHIPS = {"Target", "Effects", "Items", "Coords", "CPS", "Health", "Speed", "Stance", "Alerts", "Zoom"};
+    private static final String[] PACK_PAGES = {"Packs", "Window"};
+    private static final String[] PACK_KINDS = {"Looks", "PvP loadouts"};
+    private static final String[] TARGET_SRC = {"Last hit + aim", "Last hit", "Crosshair"};
+    private static final String[] BACKDROP = {"None", "Glass", "Dark", "Bar"};
     private static final String[] HB_STYLE = {"Glass", "Dark", "Minimal"};
     private static final String[] TIMER_MODE = {"Game launch", "World join"};
     private static final int[] QUICK = {0xFF7DD3FC, 0xFFC084FC, 0xFFF9A8D4, 0xFFFDE68A, 0xFF86EFAC, 0xFFFDA4AF, 0xFF5EEAD4, 0xFFFFFFFF};
     private static final int[] HUE_STOPS = {0xFFFF0000, 0xFFFFFF00, 0xFF00FF00, 0xFF00FFFF, 0xFF0000FF, 0xFFFF00FF, 0xFFFF0000};
     private static final int TEXT = 0xFFF2F5FA, DIM = 0xFFA4ADBF, FAINT = 0xFF7C8598;
-    private static int lastTab = 0, fontPage = -1, hudSel = 0;
+    private static int lastTab = 0, fontPage = -1, hudSel = 0, pvpSel = 0, packPage = 0, packKind = 0, lastPack = -1;
     private static boolean editSecond = false;
 
     private final Screen parent;
@@ -100,6 +105,19 @@ public final class SettingsScreen extends Screen {
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        try {
+            renderBody(ctx, mouseX, mouseY, delta);
+        } catch (Throwable t) {                           // a broken settings screen must never crash the game: close it
+            Safe.fail("settings-screen", t);
+            Safe.unwind(ctx);
+            Glass.alpha = 1f;
+            Glass.fast = false;
+            Runtime.save();
+            client.setScreen(parent);
+        }
+    }
+
+    private void renderBody(DrawContext ctx, int mouseX, int mouseY, float delta) {
         super.render(ctx, mouseX, mouseY, delta);         // the game's own background blur
         long now = System.nanoTime();
         float dt = Math.min(0.05f, (now - lastNanos) / 1e9f);
@@ -131,15 +149,21 @@ public final class SettingsScreen extends Screen {
         m.translate(ox, oy);
         m.scale(s, s);
 
+        if (st.windowGlow) {                               // soft colour clouds behind the glass, drifting slowly
+            float tt = LyricsHud.time();
+            blob(ctx, W * 0.14f + 22 * (float) Math.sin(tt * 0.31), H * 0.18f + 14 * (float) Math.cos(tt * 0.27), 72, st.colour);
+            blob(ctx, W * 0.86f + 18 * (float) Math.cos(tt * 0.23), H * 0.82f + 16 * (float) Math.sin(tt * 0.29), 78, st.colour2);
+            blob(ctx, W * 0.52f + 40 * (float) Math.sin(tt * 0.17), H + 6, 60, st.colour);
+        }
         Glass.shadow(ctx, Math.round(pdx), Math.round(pdy), W, H, 18);
         if (st.window3d) {                                 // slab thickness, shifts with the lean
             for (int i = 4; i >= 1; i--)
                 Glass.rrect(ctx, Math.round(pdx * i * 0.35f), Math.round(pdy * i * 0.35f + i * 0.7f), W, H, 18, 0x26101828);
         }
         Glass.rimTint = accent & 0xFFFFFF;                 // rim light picks up your accent colour
-        Glass.panel(ctx, 0, 0, W, H, 18, 0x70141A2A, 1f, 0.17f);
+        Glass.panel(ctx, 0, 0, W, H, 18, Glass.hudFill(0x70), 1f, 0.17f);
         Glass.rimTint = 0;
-        Glass.sweep(ctx, 0, 0, W, H, 18, (LyricsHud.time() % 8f) / 8f);
+        if (st.windowSweep) Glass.sweep(ctx, 0, 0, W, H, 18, (LyricsHud.time() % 8f) / 8f);
 
         // header: brand mark, title, dividers
         Glass.panel(ctx, 16, 10, 14, 14, 7, accent, 0.9f, 0.3f);
@@ -148,7 +172,7 @@ public final class SettingsScreen extends Screen {
         Glass.textRight(ctx, textRenderer, "K to reopen", W - 40, 13, FAINT);
         if (ui.button("close", W - 30, 8, 16, 16, "x", accent, false)) closing = true;
         lastTab = ui.segmented("tabs", 14, 30, W - 28, TABS, lastTab, accent);
-        Glass.rrect(ctx, 16, 52, W - 32, 1, 0, 0x1EFFFFFF);
+        Glass.rrect(ctx, 16, 52, W - 32, 1, 0, (0x40 << 24) | (accent & 0xFFFFFF));
 
         boolean surgeChanged = false, sourceChanged = false, audioChanged = false;
         idField.visible = false;
@@ -158,18 +182,23 @@ public final class SettingsScreen extends Screen {
 
         switch (lastTab) {
             case 0 -> {
+                tipRow(y, "Show or hide the lyrics on your HUD.");
                 ui.label("Lyrics", lx, y + 3, TEXT);
                 st.lyricsEnabled = ui.toggle("lyr", tg, y, st.lyricsEnabled, accent); y += rh;
                 ui.label("Now-playing bar", lx, y + 3, TEXT);
                 st.showBar = ui.toggle("bar", tg, y, st.showBar, accent); y += rh;
+                tipRow(y, "Chunk: a few words at a time. Line: the whole line. Type: types it out. Sing: karaoke fill. Scroll: previous / current / next.");
                 ui.label("Display", lx, y + 3, TEXT);
                 st.displayMode = ui.segmented("mode", cx, y, cw, LyricsView.MODES, st.displayMode, accent); y += rh;
+                tipRow(y, "How many words each chunk shows (Chunk display only).");
                 ui.label("Words per line", lx, y + 3, st.displayMode == 0 ? TEXT : FAINT);
                 st.wordsPerLine = Math.round(ui.slider("wpl", cx, y, cw - 44, st.wordsPerLine, 1, 8, 1, accent));
                 Glass.textRight(ctx, textRenderer, st.displayMode == 0 ? String.valueOf(st.wordsPerLine) : "chunk mode", rv, y + 4, DIM); y += rh;
+                tipRow(y, "How long a line stays before fading out when there is a long gap.");
                 ui.label("Stay time", lx, y + 3, TEXT);
                 st.staySeconds = ui.slider("stay", cx, y, cw - 44, st.staySeconds, 1, 10, 0.5f, accent);
                 Glass.textRight(ctx, textRenderer, st.staySeconds + "s", rv, y + 4, DIM); y += rh;
+                tipRow(y, "Shift the lyrics earlier (negative) or later (positive) if they feel off.");
                 ui.label("Sync", lx, y + 3, TEXT);
                 st.syncOffsetMs = Math.round(ui.slider("sync", cx, y, cw - 44, st.syncOffsetMs, -3000, 3000, 50, accent));
                 Glass.textRight(ctx, textRenderer, (st.syncOffsetMs > 0 ? "+" : "") + st.syncOffsetMs + " ms", rv, y + 4, DIM);
@@ -181,7 +210,8 @@ public final class SettingsScreen extends Screen {
                     int i = start + j;
                     if (i >= fs.length) break;
                     int cxp = lx + (j % 4) * (chipW + 6), cyp = y + (j / 4) * 22;
-                    if (ui.chip("font" + i, cxp, cyp, chipW, 18, fs[i].label, fs[i].fontId(), st.font == i, accent)) st.font = i;
+                    boolean have = Fonts.available(fs[i]);
+                    if (ui.chip("font" + i, cxp, cyp, chipW, 18, have ? fs[i].label : fs[i].label + " (missing)", Fonts.idOf(fs[i]), st.font == i, accent)) st.font = i;
                 }
                 y += 2 * rh + 2;
                 int pages = FontStyle.pages();
@@ -194,7 +224,11 @@ public final class SettingsScreen extends Screen {
                 Glass.textRight(ctx, textRenderer, st.sizePercent + "%", rv, y + 4, DIM); y += rh;
                 ui.label("Opacity", lx, y + 3, TEXT);
                 st.opacity = Math.round(ui.slider("opac", cx, y, cw - 44, st.opacity, 25, 100, 5, accent));
-                Glass.textRight(ctx, textRenderer, st.opacity + "%", rv, y + 4, DIM);
+                Glass.textRight(ctx, textRenderer, st.opacity + "%", rv, y + 4, DIM); y += rh;
+                if (!Fonts.available(FontStyle.of(st.font)))
+                    Glass.text(ctx, textRenderer, "This font's files are missing from the build, so the default font is used.", lx, y, 0xFFF87171);
+                else if (Fonts.missing() > 0)
+                    Glass.text(ctx, textRenderer, Fonts.missing() + " font(s) missing from this build (shown as 'missing'). See config/surgelyrics-errors.log.", lx, y, 0xFFFBBF24);
             }
             case 2 -> {
                 st.anchor = anchorGrid(ctx, "anc", lx, y, st.anchor, st.offX, st.offY, 200, 22, accent);
@@ -211,10 +245,6 @@ public final class SettingsScreen extends Screen {
                 ui.label("Now-playing bar", lx, by + 3, TEXT);
                 st.barBottom = ui.segmented("barpos", cx + 20, by, 190, BAR, st.barBottom ? 1 : 0, accent) == 1;
                 Glass.text(ctx, textRenderer, "Click a cell to move the lyrics, then nudge with the sliders.", lx, by + 22, FAINT);
-                ui.label("Bob motion", lx, by + 44 + 3, TEXT);
-                st.intensity = ui.segmented("motion", cx, by + 44, cw, MOTION, st.intensity, accent);
-                ui.label("3D settings window", lx, by + 66 + 3, TEXT);
-                st.window3d = ui.toggle("w3d", tg, by + 66, st.window3d, accent);
             }
             case 3 -> {
                 List<Colors.Palette> ps = Colors.PALETTES;
@@ -254,6 +284,7 @@ public final class SettingsScreen extends Screen {
                 Glass.textRight(ctx, textRenderer, String.valueOf(st.gradientSpeed), rv, y + 4, DIM);
             }
             case 4 -> {
+                tipRow(y, "Flat, 3D (stacked layers) or Outline.");
                 ui.label("Text depth", lx, y + 3, TEXT);
                 st.depthStyle = ui.segmented("depth", cx, y, cw, DEPTH, st.depthStyle, accent); y += rh;
                 boolean d3 = st.depthStyle == 1;
@@ -263,16 +294,41 @@ public final class SettingsScreen extends Screen {
                 ui.label("Light angle", lx, y + 3, d3 ? TEXT : FAINT);
                 st.lightAngle = Math.round(ui.slider("ang", cx, y, cw - 44, st.lightAngle, 0, 355, 5, accent));
                 Glass.textRight(ctx, textRenderer, st.lightAngle + "\u00b0", rv, y + 4, DIM); y += rh;
+                tipRow(y, "Soft glow behind the letters. Skipped automatically while Surge is easing.");
                 ui.label("Glow", lx, y + 3, TEXT);
                 st.glowStrength = Math.round(ui.slider("glow", cx, y, cw - 44, st.glowStrength, 0, 100, 5, accent));
                 Glass.textRight(ctx, textRenderer, st.glowStrength == 0 ? "off" : st.glowStrength + "%", rv, y + 4, DIM); y += rh;
+                tipRow(y, "How one line replaces the next.");
                 ui.label("Transition", lx, y + 3, TEXT);
                 st.transition = ui.segmented("trans", cx, y, cw, LyricTransitions.STYLES, st.transition, accent); y += rh;
+                tipRow(y, "How long the transition takes.");
                 ui.label("Duration", lx, y + 3, TEXT);
                 st.transitionMs = Math.round(ui.slider("tms", cx, y, cw - 44, st.transitionMs, 150, 800, 10, accent));
                 Glass.textRight(ctx, textRenderer, st.transitionMs + " ms", rv, y + 4, DIM);
             }
             case 5 -> {
+                tipRow(y, "A card behind the lyrics: glass, dark, or a bar with an accent edge.");
+                ui.label("Backdrop", lx, y + 3, TEXT);
+                st.backdrop = ui.segmented("bkd", cx, y, cw, BACKDROP, st.backdrop, accent); y += rh;
+                tipRow(y, "A dim upside-down copy of the line underneath.");
+                ui.label("Reflection", lx, y + 3, TEXT);
+                st.reflection = Math.round(ui.slider("refl", cx, y, cw - 44, st.reflection, 0, 60, 5, accent));
+                Glass.textRight(ctx, textRenderer, st.reflection == 0 ? "off" : st.reflection + "%", rv, y + 4, DIM); y += rh;
+                tipRow(y, "Each letter rides a wave. Letters are drawn one by one, so 3D layers and glow are off in this mode.");
+                ui.label("Wave letters", lx, y + 3, TEXT);
+                st.waveAmp = Math.round(ui.slider("wave", cx, y, cw - 44, st.waveAmp, 0, 6, 1, accent));
+                Glass.textRight(ctx, textRenderer, st.waveAmp == 0 ? "off" : st.waveAmp + " px", rv, y + 4, DIM); y += rh;
+                tipRow(y, "Twinkling glints around the lyrics.");
+                ui.label("Sparkles", lx, y + 3, TEXT);
+                st.sparkles = ui.toggle("spark", tg, y, st.sparkles, accent); y += rh;
+                tipRow(y, "A thin line under the lyrics that fills as the line plays.");
+                ui.label("Progress underline", lx, y + 3, TEXT);
+                st.underline = ui.toggle("undl", tg, y, st.underline, accent); y += rh;
+                ui.label("Screen-edge glow on beats", lx, y + 3, st.reactive ? TEXT : FAINT);
+                st.edgeGlow = ui.toggle("edge", tg, y, st.edgeGlow, accent); y += rh;
+                Glass.text(ctx, textRenderer, "Wave draws letters one by one, so it replaces 3D layers and glow. Edge glow needs Audio reactive.", lx, y, FAINT);
+            }
+            case 6 -> {
                 HudWidget[] ws = st.widgets();
                 int chipW = (W - 32 - 6 * 5) / 7;
                 for (int i = 0; i < ws.length; i++)
@@ -350,7 +406,132 @@ public final class SettingsScreen extends Screen {
                     }
                 }
             }
-            case 6 -> {
+            case 7 -> {
+                int chipW = (W - 32 - (PVP_CHIPS.length - 1) * 4) / PVP_CHIPS.length;
+                for (int i = 0; i < PVP_CHIPS.length; i++)
+                    if (ui.chip("pv" + i, lx + i * (chipW + 4), y, chipW, 18, PVP_CHIPS[i], null, pvpSel == i, accent)) pvpSel = i;
+                y += 26;
+                if (pvpSel < 8) {
+                    final HudWidget cfg = st.pvpWidgets()[pvpSel];
+                    int[] vs = switch (pvpSel) { case 0 -> new int[]{120, 34}; case 1 -> new int[]{96, 60}; case 2 -> new int[]{80, 18}; case 3 -> new int[]{130, 24}; default -> new int[]{80, 18}; };
+                    cfg.anchor = anchorGrid(ctx, "pa", lx, y, cfg.anchor, cfg.offX, cfg.offY, vs[0], vs[1], accent);
+                    int rx = 150, sx = 226, sww = W - 16 - 56 - sx;
+                    ui.label("Horizontal", rx, y + 3, TEXT);
+                    cfg.offX = Math.round(ui.slider("pox" + pvpSel, sx, y, sww, cfg.offX, -300, 300, 2, accent));
+                    Glass.textRight(ctx, textRenderer, String.valueOf(cfg.offX), rv, y + 4, DIM);
+                    ui.label("Vertical", rx, y + rh + 3, TEXT);
+                    cfg.offY = Math.round(ui.slider("poy" + pvpSel, sx, y + rh, sww, cfg.offY, -300, 300, 2, accent));
+                    Glass.textRight(ctx, textRenderer, String.valueOf(cfg.offY), rv, y + rh + 4, DIM);
+                    ui.label("Scale", rx, y + 2 * rh + 3, TEXT);
+                    cfg.scale = Math.round(ui.slider("psc" + pvpSel, sx, y + 2 * rh, sww, cfg.scale, 50, 200, 5, accent));
+                    Glass.textRight(ctx, textRenderer, cfg.scale + "%", rv, y + 2 * rh + 4, DIM);
+                    y += 68 + 8;
+                    ui.label("Enabled", lx, y + 3, TEXT);
+                    cfg.on = ui.toggle("pon" + pvpSel, lx + 56, y, cfg.on, accent);
+                    ui.label("Glass background", 150, y + 3, TEXT);
+                    cfg.bg = ui.toggle("pbg" + pvpSel, tg, y, cfg.bg, accent);
+                    y += rh;
+                    ui.label("Colour", lx, y + 3, TEXT);
+                    hexBind("pvp" + pvpSel, cfg.color, c -> cfg.color = c);
+                    hexPill(ctx, lx + 56, y, 108, cfg.color);
+                    cfg.color = ui.swatches("pq" + pvpSel, 178, y + 1, QUICK, cfg.color);
+                    y += rh;
+                    switch (pvpSel) {
+                        case 0 -> {
+                            ui.label("Show", lx, y + 3, TEXT);
+                            st.targetSource = ui.segmented("tsrc", cx, y, 260, TARGET_SRC, st.targetSource, accent); y += rh;
+                            ui.label("Armor", lx, y + 3, TEXT);
+                            st.targetArmor = ui.toggle("tarm", lx + 44, y, st.targetArmor, accent);
+                            ui.label("Distance", 110, y + 3, TEXT);
+                            st.targetDistance = ui.toggle("tdist", 110 + 54, y, st.targetDistance, accent);
+                            ui.label("Keep last hit", 230, y + 3, TEXT);
+                            st.targetHoldSec = Math.round(ui.slider("thold", 310, y, 130, st.targetHoldSec, 2, 10, 1, accent));
+                            Glass.textRight(ctx, textRenderer, st.targetHoldSec + "s", rv, y + 4, DIM);
+                        }
+                        case 1 -> {
+                            ui.label("Show level", lx, y + 3, TEXT);
+                            st.effectsLevel = ui.toggle("elvl", lx + 70, y, st.effectsLevel, accent);
+                            ui.label("Blink under", 170, y + 3, TEXT);
+                            st.effectsWarnSec = Math.round(ui.slider("ewarn", 244, y, 170, st.effectsWarnSec, 0, 30, 1, accent));
+                            Glass.textRight(ctx, textRenderer, st.effectsWarnSec == 0 ? "off" : st.effectsWarnSec + "s", rv, y + 4, DIM);
+                        }
+                        case 2 -> {
+                            ui.label("Totems", lx, y + 3, TEXT);
+                            st.itemTotem = ui.toggle("itot", lx + 44, y, st.itemTotem, accent);
+                            ui.label("Gapples", 110, y + 3, TEXT);
+                            st.itemGapple = ui.toggle("igap", 110 + 46, y, st.itemGapple, accent);
+                            ui.label("Pearls", 210, y + 3, TEXT);
+                            st.itemPearl = ui.toggle("iprl", 210 + 38, y, st.itemPearl, accent);
+                            ui.label("Crystals", 300, y + 3, TEXT);
+                            st.itemCrystal = ui.toggle("icry", 300 + 48, y, st.itemCrystal, accent); y += rh;
+                            ui.label("XP bottles", lx, y + 3, TEXT);
+                            st.itemXp = ui.toggle("ixp", lx + 62, y, st.itemXp, accent);
+                            ui.label("Arrows", 130, y + 3, TEXT);
+                            st.itemArrow = ui.toggle("iarr", 130 + 40, y, st.itemArrow, accent);
+                            ui.label("Hide zero", 226, y + 3, TEXT);
+                            st.itemsHideZero = ui.toggle("izero", 226 + 54, y, st.itemsHideZero, accent);
+                            ui.label("Vertical", 330, y + 3, TEXT);
+                            st.itemsVertical = ui.toggle("ivert", 330 + 44, y, st.itemsVertical, accent);
+                        }
+                        case 3 -> {
+                            ui.label("Decimals", lx, y + 3, TEXT);
+                            st.coordsDecimals = Math.round(ui.slider("cdec", cx, y, 120, st.coordsDecimals, 0, 2, 1, accent));
+                            Glass.text(ctx, textRenderer, String.valueOf(st.coordsDecimals), cx + 130, y + 4, DIM); y += rh;
+                            ui.label("Facing", lx, y + 3, TEXT);
+                            st.coordsFacing = ui.toggle("cface", lx + 40, y, st.coordsFacing, accent);
+                            ui.label("Nether / Overworld line", 110, y + 3, TEXT);
+                            st.coordsNether = ui.toggle("cneth", 110 + 118, y, st.coordsNether, accent);
+                        }
+                        case 4 -> {
+                            ui.label("Show right click", lx, y + 3, TEXT);
+                            st.cpsRight = ui.toggle("cpsr", lx + 90, y, st.cpsRight, accent);
+                        }
+                        case 5 -> {
+                            ui.label("Show absorption", lx, y + 3, TEXT);
+                            st.healthAbsorb = ui.toggle("habs", lx + 88, y, st.healthAbsorb, accent);
+                            ui.label("Colour by health", 190, y + 3, TEXT);
+                            st.healthColorize = ui.toggle("hcol", 190 + 90, y, st.healthColorize, accent);
+                        }
+                        case 6 -> {
+                            ui.label("Decimals", lx, y + 3, TEXT);
+                            st.speedDecimals = Math.round(ui.slider("sdec", cx, y, 120, st.speedDecimals, 0, 2, 1, accent));
+                            Glass.text(ctx, textRenderer, String.valueOf(st.speedDecimals), cx + 130, y + 4, DIM);
+                        }
+                        default -> {
+                            ui.label("Always show", lx, y + 3, TEXT);
+                            st.stanceAlways = ui.toggle("stal", lx + 66, y, st.stanceAlways, accent);
+                            Glass.text(ctx, textRenderer, "Off: only shows while sprinting or sneaking.", 150, y + 4, FAINT);
+                        }
+                    }
+                } else if (pvpSel == 8) {
+                    tipRow(y, "Red screen edges that pulse faster as your health drops.");
+                    ui.label("Low health warning", lx, y + 3, TEXT);
+                    st.lowHealthWarn = ui.toggle("lhw", tg, y, st.lowHealthWarn, accent); y += rh;
+                    ui.label("Warn below", lx, y + 3, st.lowHealthWarn ? TEXT : FAINT);
+                    st.lowHealthHp = Math.round(ui.slider("lhhp", cx, y, cw - 80, st.lowHealthHp, 2, 20, 1, accent));
+                    Glass.textRight(ctx, textRenderer, Fmt.fixed(st.lowHealthHp / 2.0, 1) + " hearts", rv, y + 4, DIM); y += rh + 4;
+                    tipRow(y, "Armor widget blinks red/white when a piece is nearly broken.");
+                    ui.label("Low armor flash", lx, y + 3, TEXT);
+                    st.lowArmorFlash = ui.toggle("law", tg, y, st.lowArmorFlash, accent); y += rh;
+                    ui.label("Flash below", lx, y + 3, st.lowArmorFlash ? TEXT : FAINT);
+                    st.armorWarnPct = Math.round(ui.slider("awp", cx, y, cw - 80, st.armorWarnPct, 5, 50, 5, accent));
+                    Glass.textRight(ctx, textRenderer, st.armorWarnPct + "% durability", rv, y + 4, DIM); y += rh + 4;
+                    tipRow(y, "Pulsing NO TOTEM under the crosshair while you are carrying none.");
+                    ui.label("No-totem alert", lx, y + 3, TEXT);
+                    st.lowTotemWarn = ui.toggle("ltw", tg, y, st.lowTotemWarn, accent);
+                } else {
+                    tipRow(y, "Hold the zoom key to narrow your field of view. It does not touch combat or aim.");
+                    ui.label("Hold-to-zoom", lx, y + 3, TEXT);
+                    st.zoom = ui.toggle("zoom", tg, y, st.zoom, accent); y += rh;
+                    ui.label("Zoom strength", lx, y + 3, st.zoom ? TEXT : FAINT);
+                    st.zoomFactor = Math.round(ui.slider("zf", cx, y, cw - 80, st.zoomFactor, 2, 10, 1, accent));
+                    Glass.textRight(ctx, textRenderer, "x" + st.zoomFactor, rv, y + 4, DIM); y += rh + 8;
+                    Glass.text(ctx, textRenderer, Glass.fit(textRenderer, "Zoom key: hold C (change it under Controls).", W - 32), lx, y, FAINT);
+                    Glass.text(ctx, textRenderer, Glass.fit(textRenderer, "Everything in this tab only shows information you already have: no hitbox, reach or aim changes.", W - 32), lx, y + 12, FAINT);
+                }
+            }
+            case 8 -> {
+                tipRow(y, "Makes the HUD react to your system's output volume. Windows only.");
                 ui.label("Audio reactive", lx, y + 3, TEXT);
                 boolean rc = ui.toggle("react", tg, y, st.reactive, accent);
                 if (rc != st.reactive) { st.reactive = rc; audioChanged = true; }
@@ -374,7 +555,50 @@ public final class SettingsScreen extends Screen {
                 Glass.text(ctx, textRenderer, "Meter: " + Runtime.AUDIO.status(), lx, y, FAINT);
                 Glass.text(ctx, textRenderer, "Reacts to your system's output volume, so music from any app drives it. Windows only.", lx, y + 12, FAINT);
             }
-            case 7 -> {
+            case 9 -> {
+                packPage = ui.segmented("ppage", lx, y, 150, PACK_PAGES, packPage, accent);
+                if (packPage == 0) {
+                    Glass.text(ctx, textRenderer, "Pick a pack to set font, colours, effects and window theme in one click.", lx + 162, y + 4, FAINT);
+                    y += 24;
+                    packKind = ui.segmented("pkind", lx, y, 190, PACK_KINDS, packKind, accent);
+                    int[] list = packKind == 0 ? Presets.looks() : Presets.pvps();
+                    Glass.text(ctx, textRenderer, packKind == 0 ? "Look packs never touch your PvP widgets." : "Loadouts switch PvP widgets and alerts, and keep lyrics small.", lx + 202, y + 4, FAINT);
+                    y += 24;
+                    int cols = 4, gw = (W - 32 - (cols - 1) * 6) / cols;
+                    for (int j = 0; j < list.length; j++) {
+                        int pi = list[j], gx = lx + (j % cols) * (gw + 6), gy = y + (j / cols) * 22;
+                        ui.tip(gx, gy, gw, 18, Presets.NAMES[pi] + ": " + Presets.DESC[pi]);
+                        if (ui.chip("pack" + pi, gx, gy, gw, 18, "    " + Presets.NAMES[pi], null, lastPack == pi, accent)) { Presets.apply(st, pi); lastPack = pi; surgeChanged = true; }
+                        int[] sw2 = Presets.swatch(pi);
+                        Glass.rrect(ctx, gx + 8, gy + 5, 8, 8, 4, sw2[0]);
+                        Glass.rrect(ctx, gx + 13, gy + 8, 5, 5, 2, sw2[1]);
+                    }
+                } else {
+                    int chipW = (W - 32 - 5 * 5) / 6;
+                    y += 24;
+                    for (int i = 0; i < Themes.ALL.length; i++) {
+                        int tx = lx + (i % 6) * (chipW + 5), ty = y + (i / 6) * 22;
+                        if (ui.chip("th" + i, tx, ty, chipW, 18, "   " + Themes.ALL[i].name(), null, st.uiTheme == i, accent)) st.uiTheme = i;
+                        Glass.rrect(ctx, tx + 7, ty + 5, 8, 8, 4, 0xFF000000 | Themes.ALL[i].body());
+                        Glass.rrect(ctx, tx + 8, ty + 6, 6, 6, 3, 0x40FFFFFF);
+                    }
+                    y += 2 * 22 + 4;
+                    tipRow(y, "How see-through the window, HUD panels, widgets and hotbar are. Theme and opacity apply to all of them.");
+                    ui.label("Glass opacity", lx, y + 3, TEXT);
+                    st.glassOpacity = Math.round(ui.slider("gop", cx, y, cw - 44, st.glassOpacity, 30, 100, 5, accent));
+                    Glass.textRight(ctx, textRenderer, st.glassOpacity + "%", rv, y + 4, DIM); y += rh;
+                    tipRow(y, "Soft colour clouds drifting behind this window.");
+                    ui.label("Window glow", lx, y + 3, TEXT);
+                    st.windowGlow = ui.toggle("wglow", tg, y, st.windowGlow, accent); y += rh;
+                    ui.label("Light sweep", lx, y + 3, TEXT);
+                    st.windowSweep = ui.toggle("wsweep", tg, y, st.windowSweep, accent); y += rh;
+                    ui.label("3D settings window", lx, y + 3, TEXT);
+                    st.window3d = ui.toggle("w3d", tg, y, st.window3d, accent); y += rh;
+                    ui.label("Lyric bob motion", lx, y + 3, TEXT);
+                    st.intensity = ui.segmented("motion", cx, y, cw, MOTION, st.intensity, accent);
+                }
+            }
+            case 10 -> {
                 SurgeProfile[] ps = SurgeProfile.values();
                 SurgeProfile curP = SurgeProfile.byName(st.surgeProfile);
                 int chipW = (W - 32 - 18) / 4;
@@ -389,23 +613,28 @@ public final class SettingsScreen extends Screen {
                 }
                 y += 2 * rh + 2;
                 final int rs = 20;
+                tipRow(y, "Tightens culling when FPS or the 1% low is poor, relaxes it when there is headroom.");
                 ui.label("Adaptive easing", lx, y + 3, TEXT);
                 boolean ad = ui.toggle("adapt", tg, y, st.surgeAdaptive, accent);
                 if (ad != st.surgeAdaptive) { st.surgeAdaptive = ad; surgeChanged = true; }
                 y += rs;
+                tipRow(y, "The frame rate adaptive easing aims for.");
                 ui.label("Target FPS", lx, y + 3, st.surgeAdaptive ? TEXT : FAINT);
                 int tf = Math.round(ui.slider("tfps", cx, y, cw - 44, st.targetFps, 30, 240, 10, accent));
                 if (tf != st.targetFps) { st.targetFps = tf; surgeChanged = true; }
                 Glass.textRight(ctx, textRenderer, String.valueOf(st.targetFps), rv, y + 4, DIM); y += rs;
+                tipRow(y, "Caps FPS while the game window is not focused. 0 = off.");
                 ui.label("Background FPS", lx, y + 3, TEXT);
                 st.backgroundFps = Math.round(ui.slider("bgfps", cx, y, cw - 44, st.backgroundFps, 0, 60, 5, accent));
                 Glass.textRight(ctx, textRenderer, st.backgroundFps == 0 ? "off" : String.valueOf(st.backgroundFps), rv, y + 4, DIM); y += rs;
+                tipRow(y, "Skips glow, 3D layers and effects while Surge is easing.");
                 ui.label("Lighten lyrics when slow", lx, y + 3, TEXT);
                 boolean lt = ui.toggle("lite", tg, y, st.lightenLyrics, accent);
                 if (lt != st.lightenLyrics) { st.lightenLyrics = lt; surgeChanged = true; }
                 y += rs;
                 ui.label("FPS overlay", lx, y + 3, TEXT);
                 st.surgeOverlay = ui.toggle("ovl", tg, y, st.surgeOverlay, accent); y += rs;
+                tipRow(y, "Skips drawing mobs and chests that are completely hidden by solid blocks.");
                 ui.label("Hide behind walls", lx, y + 3, TEXT);
                 ui.label("Mobs", 150, y + 3, DIM);
                 st.occludeMobs = ui.toggle("occm", 150 + 32, y, st.occludeMobs, accent);
@@ -420,9 +649,10 @@ public final class SettingsScreen extends Screen {
                 Glass.text(ctx, textRenderer, "Live: " + LyricsHud.lastFps + " fps, 1% low " + LyricsHud.lastLow
                         + "   ranges at " + Math.round(Runtime.SURGE.scale() * 100) + "%", lx, y + 12, FAINT);
             }
-            case 8 -> {
+            case 11 -> {
                 final int r2 = 20;
                 SurgeProfile curP = SurgeProfile.byName(st.surgeProfile);
+                tipRow(y, "Distances in blocks. 0 means never hide. Moving a slider switches to Custom.");
                 ui.label("Custom limits", lx, y + 3, TEXT);
                 if (ui.button("copyp", W - 154, y, 140, 16, "Copy current profile", accent, false)) {
                     SurgeLimits.copyToCustom(curP == null ? SurgeProfile.BALANCED : curP, st);
@@ -450,6 +680,7 @@ public final class SettingsScreen extends Screen {
                 Glass.text(ctx, textRenderer, "Never hidden: you, other players, your pets, your mount, bosses, glowing mobs.", lx, y + 11, FAINT);
             }
             default -> {
+                tipRow(y, "Where now-playing comes from: Windows media, the Spotify API, or whichever is playing.");
                 ui.label("Source", lx, y + 3, TEXT);
                 int src = ui.segmented("src", cx, y, cw, SOURCES, st.source, accent);
                 if (src != st.source) { st.source = src; sourceChanged = true; }
@@ -474,7 +705,7 @@ public final class SettingsScreen extends Screen {
 
         // live preview, in the real renderer, for every tab that changes how lyrics look; the two sample lines
         // swap every few seconds so the chosen transition is always visible
-        if (lastTab <= 1 || lastTab == 3 || lastTab == 4) {
+        if (lastTab <= 1 || lastTab == 3 || lastTab == 4 || lastTab == 5 || (lastTab == 9 && packPage == 0)) {
             int py = H - 46;
             Glass.rrect(ctx, 16, py - 6, W - 32, 1, 0, 0x1EFFFFFF);
             Glass.panel(ctx, 14, py, W - 28, 34, 12, 0x2A000000, 0.5f, 0.12f);
@@ -493,6 +724,11 @@ public final class SettingsScreen extends Screen {
             LyricsHud.previewMode = false;
         }
 
+        String dis = Safe.summary();
+        if (ui.tip != null) Glass.text(ctx, textRenderer, Glass.fit(textRenderer, ui.tip, W - 32), 16, H - 11, 0xFFB6C0D6);
+        else if (!dis.isEmpty())
+            Glass.text(ctx, textRenderer, Glass.fit(textRenderer, "Switched off after an error: " + dis + "  (see config/surgelyrics-errors.log)", W - 32), 16, H - 11, 0xFFF87171);
+
         m.popMatrix();
 
         if (surgeChanged) Runtime.applySurge();
@@ -501,6 +737,18 @@ public final class SettingsScreen extends Screen {
         if (idField.visible) idField.render(ctx, mouseX, mouseY, delta);
         if (hexField.visible) hexField.render(ctx, mouseX, mouseY, delta);
         Glass.alpha = 1f;
+    }
+
+    /** Registers the whole row at y as hover area for a help line. */
+    private void tipRow(int y, String text) { ui.tip(16, y, W - 32, 20, text); }
+
+    /** Soft glow cloud: three stacked translucent discs. */
+    private void blob(DrawContext ctx, float cx, float cy, int r, int colour) {
+        for (int i = 0; i < 3; i++) {
+            int rr = r - i * 22;
+            if (rr < 8) break;
+            Glass.rrect(ctx, Math.round(cx - rr), Math.round(cy - rr), rr * 2, rr * 2, rr, (0x0E << 24) | (colour & 0xFFFFFF));
+        }
     }
 
     /** Mini screen that doubles as a 3x3 anchor picker; shows where the box lands with the current offsets. */
