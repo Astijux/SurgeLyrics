@@ -15,8 +15,10 @@ jobs:
       # Otherwise build from the files in the repo.
       - name: Find the project
         run: |
-          if [ -f surgelyrics.zip ]; then
-            rm -rf build_src && mkdir build_src && unzip -q surgelyrics.zip -d build_src
+          zip=$(ls -t surgelyrics*.zip 2>/dev/null | head -1)
+          echo "project zip: ${zip:-none, building from loose files}"
+          if [ -n "$zip" ]; then
+            rm -rf build_src && mkdir build_src && unzip -q "$zip" -d build_src
             echo "PROJECT_DIR=build_src/surgelyrics" >> "$GITHUB_ENV"
           else
             echo "PROJECT_DIR=." >> "$GITHUB_ENV"
