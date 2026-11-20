@@ -1,4 +1,4 @@
-# Surge Lyrics
+# Surge Client
 
 Synced Spotify lyrics on your HUD + Surge-style FPS culling, one mod.
 
@@ -16,7 +16,7 @@ and mappings, port those 5 small classes, add it to `settings.gradle`.
 GitHub's web uploader silently drops anything past 100 files per upload, and this project has ~145 files (mostly fonts). So:
 1. Do **not** extract `surgelyrics.zip`. In your repo choose **Add file -> Upload files** and upload the zip itself (one file). Commit.
 2. Open `.github/workflows/main.yml`, click the pencil, replace everything with the `main.yml` that came with the download, commit.
-3. **Actions** tab -> wait for the green check -> open the run -> **Artifacts** -> download `surgelyrics-1.21.11`.
+3. **Actions** tab -> wait for the green check -> open the run -> **Artifacts** -> download `surgeclient-1.21.11`.
 4. Unzip it and put the `.jar` in your instance's `mods` folder. Needs Fabric Loader 0.18+ and Fabric API for 1.21.11.
 The build checks that all 34 font files are present and fails loudly if not. The old extract-and-upload way still works if you upload in batches of under 100.
 
