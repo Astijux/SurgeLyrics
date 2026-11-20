@@ -11,14 +11,42 @@ jobs:
         with: { distribution: temurin, java-version: 25 }
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: 9.8.2 }
+      # If the repo contains surgelyrics.zip, build from that (one file, so GitHub's 100-files-per-upload limit can't drop anything).
+      # Otherwise build from the files in the repo.
+      - name: Find the project
+        run: |
+          if [ -f surgelyrics.zip ]; then
+            rm -rf build_src && mkdir build_src && unzip -q surgelyrics.zip -d build_src
+            echo "PROJECT_DIR=build_src/surgelyrics" >> "$GITHUB_ENV"
+          else
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          fi
+      - name: Check every font file is present
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          n=$(ls mc1_21_11/src/main/resources/assets/surgelyrics/font/*.ttf | wc -l)
+          j=$(ls mc1_21_11/src/main/resources/assets/surgelyrics/font/*.json | wc -l)
+          echo "fonts: $n ttf, $j json"
+          test "$n" -ge 34 && test "$j" -ge 34
+          p=$(ls mc1_21_11/src/main/resources/assets/surgelyrics/packs/*.zip | wc -l)
+          echo "texture packs: $p"
+          test "$p" -ge 10
       - name: Core tests
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
           mkdir out && javac -d out $(find core/src -name '*.java') && java -cp out dev.surgelyrics.core.CoreTests
       - name: Build 1.21.11 jar
+        working-directory: ${{ env.PROJECT_DIR }}
         run: gradle :mc1_21_11:build --no-daemon
+      - name: Check the jar contains the fonts
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          jar=$(ls mc1_21_11/build/libs/surgeclient-*.jar | grep -v sources | head -1)
+          echo "jar: $jar"
+          unzip -l "$jar" | grep -c "assets/surgelyrics/font/.*ttf" || true
       - uses: actions/upload-artifact@v4
         with:
-          name: surgelyrics-1.21.11
+          name: surgeclient-1.21.11
           path: |
-            mc1_21_11/build/libs/surgelyrics-*.jar
-            !mc1_21_11/build/libs/*-sources.jar
+            ${{ env.PROJECT_DIR }}/mc1_21_11/build/libs/surgeclient-*.jar
+            !${{ env.PROJECT_DIR }}/mc1_21_11/build/libs/*-sources.jar
