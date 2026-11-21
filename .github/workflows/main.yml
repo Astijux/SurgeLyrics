@@ -7,21 +7,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 25 }
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: 9.8.2 }
-      # If the repo contains surgelyrics.zip, build from that (one file, so GitHub's 100-files-per-upload limit can't drop anything).
-      # Otherwise build from the files in the repo.
+      # Upload surgelyrics.zip (any name starting with "surgelyrics", any folder, do not extract it). The newest zip in the repo is built.
       - name: Find the project
         run: |
-          zip=$(ls -t surgelyrics*.zip 2>/dev/null | head -1)
-          echo "project zip: ${zip:-none, building from loose files}"
-          if [ -n "$zip" ]; then
-            rm -rf build_src && mkdir build_src && unzip -q "$zip" -d build_src
-            echo "PROJECT_DIR=build_src/surgelyrics" >> "$GITHUB_ENV"
-          else
+          best=""; bt=-1
+          while IFS= read -r -d '' f; do
+            t=$(git log -1 --format=%ct -- "$f"); t=${t:-0}
+            if [ "$t" -ge "$bt" ]; then bt=$t; best=$f; fi
+          done < <(find . -path ./build_src -prune -o -type f -iname 'surgelyrics*.zip' -print0)
+          if [ -n "$best" ]; then
+            echo "project zip: $best"
+            rm -rf build_src && mkdir build_src && unzip -q "$best" -d build_src
+            gradle_file=$(find build_src -name settings.gradle | head -1)
+            if [ -z "$gradle_file" ]; then echo "::error::The zip has no settings.gradle inside. Upload the surgelyrics zip I gave you, unextracted."; exit 1; fi
+            echo "PROJECT_DIR=$(dirname "$gradle_file")" >> "$GITHUB_ENV"
+          elif [ -f settings.gradle ]; then
+            echo "no zip found, building the loose files in the repo"
             echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          else
+            echo "::error::No surgelyrics zip found in this repo. Upload surgelyrics.zip with Add file > Upload files (do not extract it)."
+            exit 1
           fi
       - name: Check every font file is present
         working-directory: ${{ env.PROJECT_DIR }}
