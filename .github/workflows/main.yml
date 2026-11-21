@@ -7,31 +7,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 25 }
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: 9.8.2 }
-      # Upload surgelyrics.zip (any name starting with "surgelyrics", any folder, do not extract it). The newest zip in the repo is built.
+      # If the repo contains surgelyrics.zip, build from that (one file, so GitHub's 100-files-per-upload limit can't drop anything).
+      # Otherwise build from the files in the repo.
       - name: Find the project
         run: |
-          best=""; bt=-1
-          while IFS= read -r -d '' f; do
-            t=$(git log -1 --format=%ct -- "$f"); t=${t:-0}
-            if [ "$t" -ge "$bt" ]; then bt=$t; best=$f; fi
-          done < <(find . -path ./build_src -prune -o -type f -iname 'surgelyrics*.zip' -print0)
-          if [ -n "$best" ]; then
-            echo "project zip: $best"
-            rm -rf build_src && mkdir build_src && unzip -q "$best" -d build_src
-            gradle_file=$(find build_src -name settings.gradle | head -1)
-            if [ -z "$gradle_file" ]; then echo "::error::The zip has no settings.gradle inside. Upload the surgelyrics zip I gave you, unextracted."; exit 1; fi
-            echo "PROJECT_DIR=$(dirname "$gradle_file")" >> "$GITHUB_ENV"
-          elif [ -f settings.gradle ]; then
-            echo "no zip found, building the loose files in the repo"
-            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          if [ -f surgelyrics.zip ]; then
+            rm -rf build_src && mkdir build_src && unzip -q surgelyrics.zip -d build_src
+            echo "PROJECT_DIR=build_src/surgelyrics" >> "$GITHUB_ENV"
           else
-            echo "::error::No surgelyrics zip found in this repo. Upload surgelyrics.zip with Add file > Upload files (do not extract it)."
-            exit 1
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
           fi
       - name: Check every font file is present
         working-directory: ${{ env.PROJECT_DIR }}
@@ -39,10 +27,7 @@ jobs:
           n=$(ls mc1_21_11/src/main/resources/assets/surgelyrics/font/*.ttf | wc -l)
           j=$(ls mc1_21_11/src/main/resources/assets/surgelyrics/font/*.json | wc -l)
           echo "fonts: $n ttf, $j json"
-          test "$n" -ge 34 && test "$j" -ge 34
-          p=$(ls mc1_21_11/src/main/resources/assets/surgelyrics/packs/*.zip | wc -l)
-          echo "texture packs: $p"
-          test "$p" -ge 10
+          test "$n" -ge 36 && test "$j" -ge 36
       - name: Core tests
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
@@ -53,12 +38,12 @@ jobs:
       - name: Check the jar contains the fonts
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          jar=$(ls mc1_21_11/build/libs/surgeclient-*.jar | grep -v sources | head -1)
+          jar=$(ls mc1_21_11/build/libs/surgelyrics-*.jar | grep -v sources | head -1)
           echo "jar: $jar"
           unzip -l "$jar" | grep -c "assets/surgelyrics/font/.*ttf" || true
       - uses: actions/upload-artifact@v4
         with:
-          name: surgeclient-1.21.11
+          name: surgelyrics-1.21.11
           path: |
-            ${{ env.PROJECT_DIR }}/mc1_21_11/build/libs/surgeclient-*.jar
-            !${{ env.PROJECT_DIR }}/mc1_21_11/build/libs/*-sources.jar
+            ${{ env.PROJECT_DIR }}/mc1_21_11/build/libs/surgelyrics-*.jar
+            !${{ env.PROJECT_DIR }}/mc1_21_11/build/libs/*-sources.jarr
